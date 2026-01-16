@@ -925,10 +925,10 @@ class Seaopt(sea.LimitedCmd):
         if args.opt_level > 0 and args.opt_level <= 3:
             argv.append('-O{0}'.format (args.opt_level))
 
-        if not args.enable_indvar:
-            argv.append ('--seaopt-enable-indvar=false')
-        if not args.enable_loop_idiom:
-            argv.append ('--seaopt-enable-loop-idiom=false')
+        #if not args.enable_indvar:
+        #    argv.append ('--seaopt-enable-indvar=false')
+        #if not args.enable_loop_idiom:
+        #    argv.append ('--seaopt-enable-loop-idiom=false')
         # if not args.enable_nondet_init:
         #     argv.append ('--enable-nondet-init=false')
         if args.inline_threshold is not None:

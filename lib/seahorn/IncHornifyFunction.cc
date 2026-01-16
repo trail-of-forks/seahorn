@@ -287,7 +287,7 @@ void IncSmallHornifyFunction::runOnFunction(Function &F) {
                           << *(bind::fapp(bbPredicate(*exit), lv)) << "\n";);
   }
 
-  if ((!F.getName().equals("main")) && m_interproc) {
+  if ((F.getName() != "main") && m_interproc) {
     // the summary rule
     // exit(live_at_exit) & !error.flag ->
     //                  summary(true, false, false, regions, arguments,

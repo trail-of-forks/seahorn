@@ -44,7 +44,7 @@ static void removeError(Function &F, SeaBuiltinsInfo &SBI) {
       Function *cf = ci->getCalledFunction();
       if (!cf)
         continue;
-      if (!cf->getName().equals("verifier.error"))
+      if (cf->getName() != "verifier.error")
         continue;
       LOG("mixed-sem", errs()
                            << "Replace " << *ci << " with assume(false)\n.";);

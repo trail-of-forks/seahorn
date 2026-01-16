@@ -18,7 +18,7 @@ using namespace llvm;
 
 /// extracts unique scalar from a call to shadow.mem functions
 inline const Value *extractUniqueScalar(const CallBase &CB) {
-  if (CB.getCalledFunction()->getName().equals("shadow.mem.global.init"))
+  if (CB.getCalledFunction()->getName() == "shadow.mem.global.init")
     return nullptr;
   assert(CB.data_operands_size() > 0);
   // -- last argument
@@ -77,7 +77,7 @@ inline bool isShadowMem(const Value &V, const Value **out) {
 
     if (auto *ci = dyn_cast<const CallInst>(val)) {
       if (const Function *fn = ci->getCalledFunction()) {
-        if (!fn->getName().startswith("shadow.mem"))
+        if (!fn->getName().starts_with("shadow.mem"))
           return false;
         if (out)
           *out = extractUniqueScalar(*ci);
@@ -89,7 +89,7 @@ inline bool isShadowMem(const Value &V, const Value **out) {
       for (unsigned i = 0; i < phi->getNumIncomingValues(); ++i)
         wl.push(phi->getIncomingValue(i));
     } else if (const SelectInst *gamma = dyn_cast<const SelectInst>(val)) {
-      if (gamma->getName().startswith("seahorn.gsa")) {
+      if (gamma->getName().starts_with("seahorn.gsa")) {
         wl.push(gamma->getTrueValue());
         wl.push(gamma->getFalseValue());
       } else

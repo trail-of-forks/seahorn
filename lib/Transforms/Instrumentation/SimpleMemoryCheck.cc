@@ -20,6 +20,8 @@
 #include "llvm/Transforms/Utils/Cloning.h"
 #include "llvm/Transforms/Utils/Local.h"
 
+#include <optional>
+
 #include "seadsa/AllocWrapInfo.hh"
 #include "seadsa/DsaAnalysis.hh"
 #include "seahorn/Support/SeaDebug.h"
@@ -128,7 +130,7 @@ struct CheckContext {
       if (!DsaGraph)
         return;
       auto optAS = DsaGraph->getAllocSite(v);
-      assert(optAS.hasValue());
+      assert(optAS.has_value());
       seadsa::DsaAllocSite &AS = **optAS;
       if (AS.hasCallPaths())
         AS.printCallPaths(OS);
@@ -293,7 +295,7 @@ public:
   virtual llvm::StringRef getPassName() const override { return "SimpleMemoryCheck"; }
 
   /// Returns size of a known allocation
-  llvm::Optional<size_t> getAllocSize(Value *Ptr);
+  std::optional<size_t> getAllocSize(Value *Ptr);
 
 private:
   LLVMContext *m_Ctx;
@@ -366,20 +368,20 @@ bool SimpleMemoryCheck::isKnownAlloc(Value *Ptr) {
 
 /// For a known allocation, returns its size if known
 /// \sa isKnownAlloc
-llvm::Optional<size_t> SimpleMemoryCheck::getAllocSize(Value *Ptr) {
+std::optional<size_t> SimpleMemoryCheck::getAllocSize(Value *Ptr) {
   assert(Ptr);
   if (!isKnownAlloc(Ptr))
-    return None;
+    return std::nullopt;
 
   llvm::ObjectSizeOpts Opts;
   Opts.RoundToAlign = true;
   Opts.EvalMode = llvm::ObjectSizeOpts::Mode::Max;
   ObjectSizeOffsetVisitor OSOV(*m_DL, m_TLI, *m_Ctx, Opts);
   auto OffsetAlign = OSOV.compute(Ptr);
-  if (!OSOV.knownSize(OffsetAlign))
-    return llvm::None;
+  if (!SizeOffsetAPInt::known(OffsetAlign.Size))
+    return std::nullopt;
 
-  const int64_t I = OffsetAlign.first.getSExtValue();
+  const int64_t I = OffsetAlign.Size.getSExtValue();
   assert(I >= 0);
   return size_t(I);
 }
@@ -389,9 +391,7 @@ PtrOrigin SimpleMemoryCheck::trackPtrOrigin(Value *Ptr) {
   assert(Ptr);
 
   PtrOrigin Res{Ptr, 0};
-  unsigned Iter = 0;
   while (true) {
-    ++Iter;
 
     if (isKnownAlloc(Res.Ptr))
       return Res;
@@ -571,8 +571,7 @@ CheckContext SimpleMemoryCheck::getUnsafeCandidates(Instruction *Inst,
     Origin.Offset = 0;
   }
 
-  auto *Ty = LI ? LI->getType()
-                : SI->getPointerOperand()->getType()->getPointerElementType();
+  auto *Ty = LI ? LI->getType() : SI->getValueOperand()->getType();
   assert(Ty);
 
   const auto Bits = m_DL->getTypeSizeInBits(Ty);
@@ -595,7 +594,7 @@ CheckContext SimpleMemoryCheck::getUnsafeCandidates(Instruction *Inst,
   if (m_SDSA && !OriginCell)
     return Check;
 
-  if (Optional<size_t> AllocSize = getAllocSize(Origin.Ptr)) {
+  if (std::optional<size_t> AllocSize = getAllocSize(Origin.Ptr)) {
     if (int64_t(Origin.Offset) + Sz > int64_t(*AllocSize)) {
       errs() << "Unsafe access found!\n";
       errs() << "  Allocated: " << (*AllocSize) << ", access size " << Sz
@@ -619,16 +618,18 @@ CheckContext SimpleMemoryCheck::getUnsafeCandidates(Instruction *Inst,
       auto *BarrierPtrTy = Check.Barrier->getType();
       auto *AllocPtrTy = AS->getType();
       if (BarrierPtrTy->isPointerTy() && AllocPtrTy->isPointerTy()) {
-        // auto *BarrierTy = BarrierPtrTy->getPointerElementType();
-        auto *AllocTy = AllocPtrTy->getPointerElementType();
+        // Pointer element types are opaque in this LLVM.
+        Type *AllocTy = nullptr;
 
         // Temporary hack for CASS. Disabled for now.
-        if (auto *Arg = dyn_cast<Argument>(Check.Barrier))
-          if (false && Arg->getName() == "this")
-            if (AllocTy->isStructTy() &&
-                (AllocTy->getStructName().endswith("::string") ||
-                 AllocTy->getStructName().endswith("::vector3")))
-              Interesting = false;
+        if (AllocTy) {
+          if (auto *Arg = dyn_cast<Argument>(Check.Barrier))
+            if (false && Arg->getName() == "this")
+              if (AllocTy->isStructTy() &&
+                  (AllocTy->getStructName().ends_with("::string") ||
+                   AllocTy->getStructName().ends_with("::vector3")))
+                Interesting = false;
+        }
 
         //        // Heap alloc tends to return i8* instead of precise type.
         //        if (!isa<CallInst>(AS) && !isa<InvokeInst>(AS)) {
@@ -647,7 +648,7 @@ CheckContext SimpleMemoryCheck::getUnsafeCandidates(Instruction *Inst,
 
         // Discard vtables.
         //        if (auto *C = dyn_cast<Constant>(AS))
-        //          if (C->getName().startswith("_ZTVN"))
+        //          if (C->getName().starts_with("_ZTVN"))
         //            Interesting = false;
       }
     }
@@ -667,7 +668,7 @@ bool SimpleMemoryCheck::isInterestingAllocSite(Value *Ptr, int64_t LoadEnd,
   assert(Alloc);
   assert(LoadEnd > 0);
 
-  Optional<size_t> AllocSize = getAllocSize(Alloc);
+  std::optional<size_t> AllocSize = getAllocSize(Alloc);
   return AllocSize && size_t(LoadEnd) > *AllocSize;
 }
 
@@ -676,7 +677,7 @@ namespace {
 Instruction *GetNextInst(Instruction *I) {
   if (I->isTerminator())
     return I;
-  return I->getParent()->getInstList().getNextNode(*I);
+  return I->getNextNode();
 }
 
 Type *GetI8PtrTy(LLVMContext &Ctx) {
@@ -745,7 +746,7 @@ CallInst *SimpleMemoryCheck::getNDVal(size_t Bits, Function *F,
                                       IRBuilder<> &IRB, Twine Name) {
   auto *Ty = IntegerType::get(*m_Ctx, Bits);
   auto *NondetFn = createNewNDFn(Ty, "verifier.nondet");
-  CallInst *CI = IRB.CreateCall(NondetFn, None, Name);
+  CallInst *CI = IRB.CreateCall(NondetFn, {}, Name);
   UpdateCallGraph(m_CG, F, CI);
   return CI;
 }
@@ -753,7 +754,7 @@ CallInst *SimpleMemoryCheck::getNDVal(size_t Bits, Function *F,
 CallInst *SimpleMemoryCheck::getNDPtr(Function *F, IRBuilder<> &IRB,
                                       Twine Name) {
   auto *NondetPtrFn = createNewNDFn(GetI8PtrTy(*m_Ctx), "verifier.nondet_ptr");
-  CallInst *CI = IRB.CreateCall(NondetPtrFn, None, Name);
+  CallInst *CI = IRB.CreateCall(NondetPtrFn, {}, Name);
   UpdateCallGraph(m_CG, F, CI);
   return CI;
 }
@@ -815,7 +816,7 @@ void SimpleMemoryCheck::emitGlobalInstrumentation(CheckContext &Candidate,
     auto *GlobalIsBegin = IRB.CreateICmpEQ(I8GV, NDPtrBegin, "global.is.begin");
     createAssume(GlobalIsBegin, Main, IRB);
 
-    Optional<size_t> AllocSize = getAllocSize(TrackedAlloc);
+    std::optional<size_t> AllocSize = getAllocSize(TrackedAlloc);
     assert(AllocSize);
 
     auto *GlobalEnd = IRB.CreateGEP(IRB.getInt8Ty(),
@@ -866,7 +867,8 @@ void SimpleMemoryCheck::emitMemoryInstInstrumentation(CheckContext &Candidate) {
 
   auto *BeginCandiate = IRB.CreateBitOrPointerCast(
       Candidate.Barrier, GetI8PtrTy(*m_Ctx), "begin_candidate");
-  auto *TrackedBegin = CreateLoad(IRB, IRB.getInt8PtrTy(), m_trackedBegin, m_DL, "tracked_begin");
+  auto *TrackedBegin = CreateLoad(IRB, IRB.getInt8Ty()->getPointerTo(),
+                                  m_trackedBegin, m_DL, "tracked_begin");
   auto *Cmp = IRB.CreateICmpEQ(TrackedBegin, BeginCandiate);
   auto *Active = IRB.CreateLoad(IRB.getInt1Ty(), m_trackingEnabled, "active_tracking");
   auto *And = IRB.CreateAnd(Active, Cmp, "unsafe_condition");
@@ -909,7 +911,8 @@ void SimpleMemoryCheck::emitAllocSiteInstrumentation(CheckContext &Candidate,
                                        "inactive_tracking");
     auto *NDVal = getNDVal(32, CSFn, IRB);
     auto *NDBool = IRB.CreateICmpEQ(NDVal, CreateIntCnst(NDVal->getType(), 0));
-    auto *TrackedEnd = CreateLoad(IRB, IRB.getInt8PtrTy(), m_trackedEnd, m_DL, "loaded_end");
+    auto *TrackedEnd = CreateLoad(IRB, IRB.getInt8Ty()->getPointerTo(),
+                                  m_trackedEnd, m_DL, "loaded_end");
     auto *And = dyn_cast<Instruction>(IRB.CreateAnd(NotActive, NDBool));
     assert(And);
 
@@ -930,12 +933,13 @@ void SimpleMemoryCheck::emitAllocSiteInstrumentation(CheckContext &Candidate,
     // Start tracking.
     IRB.SetInsertPoint(ThenBB->getFirstNonPHI());
     CreateStore(IRB, ConstantInt::getTrue(*m_Ctx), m_trackingEnabled, m_DL);
-    auto *TrackedBegin = CreateLoad(IRB, IRB.getInt8PtrTy(), m_trackedBegin, m_DL, "loaded_begin");
+    auto *TrackedBegin = CreateLoad(IRB, IRB.getInt8Ty()->getPointerTo(),
+                                    m_trackedBegin, m_DL, "loaded_begin");
     auto *AllocIsBegin =
         IRB.CreateICmpEQ(AllocI8, TrackedBegin, "alloc.is.begin");
     createAssume(AllocIsBegin, CSFn, IRB);
 
-    Optional<size_t> AllocSize = getAllocSize(AI);
+    std::optional<size_t> AllocSize = getAllocSize(AI);
     assert(AllocSize);
 
     auto *End = IRB.CreateGEP(IRB.getInt8Ty(),
@@ -956,7 +960,8 @@ void SimpleMemoryCheck::emitAllocSiteInstrumentation(CheckContext &Candidate,
     IRB.SetInsertPoint(GetNextInst(OtherAllocInst));
     auto *OAI8 =
         IRB.CreateBitCast(OtherAllocInst, GetI8PtrTy(*m_Ctx), "other.alloc.i8");
-    auto *TrackedEnd = CreateLoad(IRB, IRB.getInt8PtrTy(), m_trackedEnd, m_DL, "loaded_end");
+    auto *TrackedEnd = CreateLoad(IRB, IRB.getInt8Ty()->getPointerTo(),
+                                  m_trackedEnd, m_DL, "loaded_end");
     auto *GT = IRB.CreateICmpSGT(OAI8, TrackedEnd);
     createAssume(GT, OtherAllocInst->getFunction(), IRB);
 
@@ -1032,9 +1037,9 @@ bool SimpleMemoryCheck::runOnModule(llvm::Module &M) {
       continue;
 
     // Skip special functions.
-    if (F.getName().startswith("seahorn.") ||
-        F.getName().startswith("shadow.") ||
-        F.getName().startswith("verifier."))
+    if (F.getName().starts_with("seahorn.") ||
+        F.getName().starts_with("shadow.") ||
+        F.getName().starts_with("verifier."))
       continue;
 
     m_TLI = &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F);
@@ -1168,7 +1173,7 @@ struct SizeStats {
     SizeStats Stats;
 
     for (auto *V : C) {
-      Optional<size_t> Size = SMC.getAllocSize(V);
+      std::optional<size_t> Size = SMC.getAllocSize(V);
       assert(Size);
 
       ++Stats.N;

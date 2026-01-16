@@ -4,6 +4,7 @@
 #include "BvOpSem2MemManagerMixin.hh"
 #include "BvOpSem2MemRepr.hh"
 
+#include "llvm/ADT/SmallString.h"
 #include "llvm/IR/GetElementPtrTypeIterator.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/Support/CommandLine.h"
@@ -583,8 +584,8 @@ Expr RawMemManagerCore::loadValueFromMem(const PtrTy &ptr, const MemValTy &mem,
     WARN << "loading form struct type " << ty << " is not supported";
     return res;
   default:
-    SmallString<256> msg;
-    raw_svector_ostream out(msg);
+    llvm::SmallString<256> msg;
+    llvm::raw_svector_ostream out(msg);
     out << "Loading from type: " << ty << " is not supported\n";
     assert(false);
     report_fatal_error(out.str());
@@ -626,8 +627,8 @@ RawMemManagerCore::storeValueToMem(Expr _val, PtrTy ptr, MemValTy mem,
     WARN << "Storing struct type " << ty << " is not supported\n";
     return res;
   default:
-    SmallString<256> msg;
-    raw_svector_ostream out(msg);
+    llvm::SmallString<256> msg;
+    llvm::raw_svector_ostream out(msg);
     out << "Loading from type: " << ty << " is not supported\n";
     assert(false);
     report_fatal_error(out.str());

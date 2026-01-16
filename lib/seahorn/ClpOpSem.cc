@@ -265,7 +265,8 @@ namespace
     void visitReturnInst (ReturnInst &I)
     {
       // -- skip return argument of main
-      if (I.getParent ()->getParent ()->getName ().equals ("main")) return;
+      if (I.getParent()->getParent()->getName() == "main")
+        return;
 
       if (I.getNumOperands () > 0)
         lookup (*I.getOperand (0));
@@ -350,15 +351,13 @@ namespace
       // skip intrinsic functions
       if (F.isIntrinsic ()) { assert (m_fparams.size () == 3); return;}
 
-
-      if (F.getName ().equals ("verifier.assume"))
-      {
-        assert (m_fparams.size () == 3);
+      if (F.getName() == "verifier.assume") {
+        assert(m_fparams.size() == 3);
         // -- assumption is only active when error flag is false
-        m_side.push_back (boolop::lor (m_s.read (m_sem.errorFlag (BB)),
-                                       lookup (*CB.getOperand (0))));
+        m_side.push_back(boolop::lor(m_s.read(m_sem.errorFlag(BB)),
+                                     lookup(*CB.getOperand(0))));
       }
-      // else if (F.getName ().equals ("verifier.assert"))
+      // else if (F.getName () == "verifier.assert")
       // {
       //   Expr ein = m_s.read (m_sem.errorFlag ());
       //   Expr eout = m_s.havoc (m_sem.errorFlag ());
@@ -367,16 +366,13 @@ namespace
       //                                   mk<EQ> (ein, eout)));
       //   m_side.push_back (boolop::limp (boolop::lneg (cond), eout));
       // }
-      // else if (F.getName ().equals ("verifier.error"))
+      // else if (F.getName () == "verifier.error")
       //   m_side.push_back (m_s.havoc (m_sem.errorFlag ()));
-      else if (F.getName ().equals ("verifier.assume.not"))
-      {
+      else if (F.getName() == "verifier.assume.not") {
         assert (m_fparams.size () == 3);
         m_side.push_back (boolop::lor (m_s.read (m_sem.errorFlag (BB)),
                                        boolop::lneg (lookup (*CB.getOperand (0)))));
-      }
-      else if (m_sem.hasFunctionInfo (F))
-      {
+      } else if (m_sem.hasFunctionInfo(F)) {
         const FunctionInfo &fi = m_sem.getFunctionInfo (F);
 
         // enabled
@@ -424,51 +420,35 @@ namespace
         m_fparams.push_back (falseE);
         m_fparams.push_back (falseE);
         m_fparams.push_back (falseE);
-      }
-      else if (F.getName ().startswith ("shadow.mem") &&
-               m_sem.isTracked (I))
-      {
-        if (F.getName ().equals ("shadow.mem.init"))
+      } else if (F.getName().starts_with("shadow.mem") && m_sem.isTracked(I)) {
+        if (F.getName() == "shadow.mem.init")
           m_s.havoc (symb(I));
-        else if (F.getName ().equals ("shadow.mem.load"))
-        {
-          const Value &v = *CB.getOperand (1);
-          m_inMem = m_s.read (symb (v));
-        }
-        else if (F.getName ().equals ("shadow.mem.store"))
-        {
-          m_inMem = m_s.read (symb (*CB.getOperand (1)));
-          m_outMem = m_s.havoc (symb (I));
-        }
-        else if (F.getName ().equals ("shadow.mem.arg.ref"))
+        else if (F.getName() == "shadow.mem.load") {
+          const Value &v = *CB.getOperand(1);
+          m_inMem = m_s.read(symb(v));
+        } else if (F.getName() == "shadow.mem.store") {
+          m_inMem = m_s.read(symb(*CB.getOperand(1)));
+          m_outMem = m_s.havoc(symb(I));
+        } else if (F.getName() == "shadow.mem.arg.ref")
           m_fparams.push_back (m_s.read (symb (*CB.getOperand (1))));
-        else if (F.getName ().equals ("shadow.mem.arg.mod"))
-        {
-          m_fparams.push_back (m_s.read (symb (*CB.getOperand (1))));
+        else if (F.getName() == "shadow.mem.arg.mod") {
+          m_fparams.push_back(m_s.read(symb(*CB.getOperand(1))));
+          m_fparams.push_back(m_s.havoc(symb(I)));
+        } else if (F.getName() == "shadow.mem.arg.new")
           m_fparams.push_back (m_s.havoc (symb (I)));
-        }
-        else if (F.getName ().equals ("shadow.mem.arg.new"))
-          m_fparams.push_back (m_s.havoc (symb (I)));
-        else if (!PF.getName ().equals ("main") &&
-                 F.getName ().equals ("shadow.mem.in"))
-        {
-          m_s.read (symb (*CB.getOperand (1)));
-        }
-        else if (!PF.getName ().equals ("main") &&
-                 F.getName ().equals ("shadow.mem.out"))
-        {
-          m_s.read (symb (*CB.getOperand (1)));
-        }
-        else if (!PF.getName ().equals ("main") &&
-                 F.getName ().equals ("shadow.mem.arg.init"))
-        {
+        else if (!(PF.getName() == "main") &&
+                 (F.getName() == "shadow.mem.in")) {
+          m_s.read(symb(*CB.getOperand(1)));
+        } else if (!(PF.getName() == "main") &&
+                   (F.getName() == "shadow.mem.out")) {
+          m_s.read(symb(*CB.getOperand(1)));
+        } else if (!(PF.getName() == "main") &&
+                   (F.getName() == "shadow.mem.arg.init")) {
           // regions initialized in main are global. We want them to
           // flow to the arguments
           /* do nothing */
         }
-      }
-      else
-      {
+      } else {
         if (m_fparams.size () > 3)
         {
           m_fparams.resize (3);
@@ -478,7 +458,6 @@ namespace
 
         visitInstruction (CB);
       }
-
     }
 
     void visitLoadInst (LoadInst &I)
@@ -536,7 +515,8 @@ namespace
     {
       const Function &F = *BB.getParent ();
       if (&F.getEntryBlock () != &BB) return;
-      if (!F.getName ().equals ("main")) return;
+      if (F.getName() != "main")
+        return;
 
       const Module &M = *F.getParent ();
       for (const GlobalVariable &g : boost::make_iterator_range (M.global_begin (),

@@ -2,6 +2,7 @@
 #include "seahorn/Expr/ExprCore.hh"
 #include "seahorn/Expr/ExprOpCore.hh"
 #include "seahorn/Expr/ExprVisitor.hh"
+#include "seahorn/Support/CompatFunctional.hh"
 
 #include "seahorn/Expr/Expr.hh"
 

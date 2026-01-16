@@ -1,4 +1,5 @@
 #include "seahorn/FiniteMapTransf.hh"
+#include "seahorn/Support/CompatFunctional.hh"
 
 #include "seahorn/Expr/ExprOpBind.hh"
 #include "seahorn/Expr/ExprOpFiniteMap.hh"

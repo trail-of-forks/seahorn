@@ -74,8 +74,8 @@ struct LowerLibCxxAbiFunctions : public ModulePass {
       if (!fn && CI.getCalledOperand())
         fn = dyn_cast<const Function>(CI.getCalledOperand()->stripPointerCasts());
 
-      if (fn && (fn->getName().equals("__cxa_allocate_exception") ||
-                 fn->getName().equals("__cxa_allocate_dependent_exception"))) {
+      if (fn && (fn->getName() == "__cxa_allocate_exception" ||
+                 fn->getName() == "__cxa_allocate_dependent_exception")) {
         if (CI.doesNotReturn() || CI.data_operands_size() != 1)
           continue;
 
@@ -93,9 +93,8 @@ struct LowerLibCxxAbiFunctions : public ModulePass {
         I.replaceAllUsesWith(ci);
         toKill.push_back(&I);
 
-      } else if (fn &&
-                 (fn->getName().equals("__cxa_free_exception") ||
-                  fn->getName().equals("__cxa_free_dependent_exception"))) {
+      } else if (fn && (fn->getName() == "__cxa_free_exception" ||
+                        fn->getName() == "__cxa_free_dependent_exception")) {
         if (!CI.doesNotReturn() || CI.arg_size() != 1)
           continue;
 
@@ -111,7 +110,7 @@ struct LowerLibCxxAbiFunctions : public ModulePass {
           (*cg)[&F]->addCalledFunction(ci,
                                        (*cg)[ci->getCalledFunction()]);
         toKill.push_back(&I);
-      } else if (fn && fn->getName().equals("__cxa_throw")) {
+      } else if (fn && fn->getName() == "__cxa_throw") {
         LOG("lower-libc++abi", errs() << "Deleted " << I << "\n");
         // Assume that after this call there is always an
         // unreachable instruction

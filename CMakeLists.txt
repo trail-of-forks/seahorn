@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10.2)
 
 project(SeaHorn)
-set(SeaHorn_VERSION_MAJOR 14)
+set(SeaHorn_VERSION_MAJOR 20)
 set(SeaHorn_VERSION_MINOR 0)
 set (SeaHorn_VERSION_PATCH 0)
 set (SeaHorn_VERSION_TWEAK "rc0")
@@ -11,7 +11,7 @@ cmake_policy(SET CMP0074 NEW)
 cmake_policy(SET CMP0077 NEW)
 endif()
 
-set(CMAKE_CXX_STANDARD 14 CACHE STRING "C++ standard to conform to")
+set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard to conform to")
 set(CMAKE_CXX_STANDARD_REQUIRED YES)
 set(CMAKE_CXX_EXTENSIONS NO)
 
@@ -68,19 +68,19 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/lib/Support/GitSHA1.cc.in" "${CMAKE_
 
 find_package (Git)
 if (GIT_FOUND)
-  set (SEAHORN_LLVM_REPO "https://github.com/seahorn/llvm-seahorn"
+  set (SEAHORN_LLVM_REPO "https://github.com/trail-of-forks/llvm-seahorn.git"
     CACHE STRING "llvm-seahorn repo")
-  set (SEA_DSA_REPO "https://github.com/seahorn/sea-dsa"
+  set (SEA_DSA_REPO "https://github.com/trail-of-forks/sea-dsa.git"
     CACHE STRING "sea-dsa repo")
-  set (CLAM_REPO "https://github.com/seahorn/crab-llvm"
+  set (CLAM_REPO "https://github.com/trail-of-forks/clam.git"
     CACHE STRING "clam repo")
   
   add_custom_target (llvm-seahorn-git
-    ${GIT_EXECUTABLE} clone ${SEAHORN_LLVM_REPO} ${CMAKE_SOURCE_DIR}/llvm-seahorn -b dev14)
+    ${GIT_EXECUTABLE} clone ${SEAHORN_LLVM_REPO} ${CMAKE_SOURCE_DIR}/llvm-seahorn -b dev20)
   add_custom_target (sea-dsa-git
-    ${GIT_EXECUTABLE} clone ${SEA_DSA_REPO} ${CMAKE_SOURCE_DIR}/sea-dsa -b dev14)
+    ${GIT_EXECUTABLE} clone ${SEA_DSA_REPO} ${CMAKE_SOURCE_DIR}/sea-dsa -b dev20)
   add_custom_target (clam-git
-    ${GIT_EXECUTABLE} clone ${CLAM_REPO} ${CMAKE_SOURCE_DIR}/clam -b dev14)
+    ${GIT_EXECUTABLE} clone ${CLAM_REPO} ${CMAKE_SOURCE_DIR}/clam -b dev20)
   add_custom_target (extra
     ${CMAKE_COMMAND} -E touch ${CMAKE_CURRENT_LIST_FILE}
     DEPENDS
@@ -100,6 +100,18 @@ set (CUSTOM_BOOST_ROOT "" CACHE PATH "Path to custom boost installation.")
 if (CUSTOM_BOOST_ROOT)
   set (BOOST_ROOT ${CUSTOM_BOOST_ROOT})
   set (Boost_NO_SYSTEM_PATHS "ON")
+endif()
+
+# Set GMP_SEARCH_PATH to ensure CMake finds GMP from Homebrew
+# This is especially important on macOS where Homebrew doesn't install to system paths
+if (NOT GMP_SEARCH_PATH)
+  if (EXISTS "/opt/homebrew/opt/gmp")
+    # ARM Mac (Apple Silicon) Homebrew path
+    set(GMP_SEARCH_PATH "/opt/homebrew/opt/gmp")
+  elseif (EXISTS "/usr/local/opt/gmp")
+    # Intel Mac Homebrew path
+    set(GMP_SEARCH_PATH "/usr/local/opt/gmp")
+  endif()
 endif()
 
 find_package(Gmp REQUIRED)
@@ -174,13 +186,29 @@ if (YICES2_FOUND)
   install(FILES ${YICES2_LIBRARY} DESTINATION lib)
 endif()  
 
-find_package (LLVM 14 CONFIG)
+# Find zstd first - LLVM depends on it
+if(LLVM_DIR)
+  # Add LLVM's cmake modules to path so we can find zstd using LLVM's Findzstd.cmake
+  list(APPEND CMAKE_MODULE_PATH "${LLVM_DIR}")
+  # Temporarily prefer shared libraries for zstd (LLVM expects zstd::libzstd_shared)
+  set(_ORIGINAL_SUFFIXES ${CMAKE_FIND_LIBRARY_SUFFIXES})
+  set(CMAKE_FIND_LIBRARY_SUFFIXES ${CMAKE_SHARED_LIBRARY_SUFFIX} ${CMAKE_STATIC_LIBRARY_SUFFIX})
+  find_package(zstd REQUIRED)
+  set(CMAKE_FIND_LIBRARY_SUFFIXES ${_ORIGINAL_SUFFIXES})
+endif()
+
+find_package (LLVM CONFIG)
+if (DEFINED LLVM_PACKAGE_VERSION)
+  string(REGEX MATCH "^([0-9]+)\\." _maj "${LLVM_PACKAGE_VERSION}")
+  if (NOT "${CMAKE_MATCH_1}" STREQUAL "20")
+    message(FATAL_ERROR
+      "Found LLVM ${LLVM_PACKAGE_VERSION}, but LLVM 20.x is required.")
+  endif()
+endif()
 if (NOT LLVM_FOUND)
-  ExternalProject_Get_Property (llvm INSTALL_DIR)
-  set (LLVM_ROOT ${INSTALL_DIR})
-  set (LLVM_DIR ${LLVM_ROOT}/lib/cmake/llvm CACHE PATH
-    "Forced location of LLVM cmake config" FORCE)
-  message (WARNING "No llvm found. Install LLVM 13.")
+  message(FATAL_ERROR
+    "LLVM 20 not found. Please install LLVM 20 or set LLVM_DIR to point to the LLVM CMake directory.\n"
+    "Example: cmake -DLLVM_DIR=/usr/lib/llvm-20/lib/cmake/llvm ..")
 else()
 
   message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
@@ -395,6 +423,8 @@ endif()
 
 if (IS_DIRECTORY ${CMAKE_SOURCE_DIR}/clam AND
     EXISTS ${CMAKE_SOURCE_DIR}/clam/CMakeLists.txt)
+  include_directories (BEFORE clam/include)
+  include_directories (BEFORE clam/crab/include)
   add_subdirectory(${CMAKE_SOURCE_DIR}/clam)
   set(HAVE_CLAM TRUE)
   include_directories (BEFORE ${CLAM_INCLUDE_DIRS})

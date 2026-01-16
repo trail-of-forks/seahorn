@@ -4,6 +4,7 @@
 
 #include "seahorn/Expr/Expr.hh"
 #include "seahorn/Expr/ExprVisitor.hh"
+#include "seahorn/Support/CompatFunctional.hh"
 
 #include "llvm/Support/raw_ostream.h"
 #include <map>

@@ -167,7 +167,7 @@ void FlatSmallHornifyFunction::runOnFunction(Function &F) {
     m_db.addRule(allVars, boolop::limp(pre, post));
   }
 
-  if (F.getName().equals("main")) {
+  if (F.getName() == "main") {
     args.clear();
     s.reset();
 
@@ -362,7 +362,7 @@ void FlatLargeHornifyFunction::runOnFunction(Function &F) {
     m_db.addRule(allVars, boolop::limp(pre, post));
   }
 
-  if (F.getName().equals("main")) {
+  if (F.getName() == "main") {
     args.clear();
     s.reset();
 

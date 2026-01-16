@@ -8,6 +8,7 @@
 #include "llvm/IR/GetElementPtrTypeIterator.h"
 #include "llvm/Pass.h"
 
+#include <optional>
 #include <seahorn/boost_flat_set.hh>
 
 // forward declarations
@@ -142,11 +143,11 @@ public:
     llvm_unreachable(nullptr);
   }
   /// Convert aggregate GenericValue to APInt
-  Optional<APInt> agg(Type *ty, const std::vector<GenericValue> &elements,
-                      seahorn::details::Bv2OpSemContext &ctx);
+  std::optional<APInt> agg(Type *ty, const std::vector<GenericValue> &elements,
+                           seahorn::details::Bv2OpSemContext &ctx);
   /// Convert vector GenericValue to APInt
-  Optional<APInt> vec(Type *ty, const std::vector<GenericValue> &elements,
-                      seahorn::details::Bv2OpSemContext &ctx);
+  std::optional<APInt> vec(Type *ty, const std::vector<GenericValue> &elements,
+                           seahorn::details::Bv2OpSemContext &ctx);
   using gep_type_iterator = generic_gep_type_iterator<>;
   /// \brief Returns symbolic representation of the gep offset
   Expr symbolicIndexedOffset(gep_type_iterator it, gep_type_iterator end,

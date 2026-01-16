@@ -53,14 +53,14 @@ void LiveSymbols::run() {
   // -- for all functions except main, add extra use of arguments
   // -- and global variables at function exit. This is needed for
   // -- summary computation.
-  if (!m_f.getName().equals("main"))
+  if (m_f.getName() != "main")
     patchArgsAndGlobals();
   // -- propagate local def/use over the CFG.
   globalPass();
 
   // HACK: skip main() because it is not treated as a function (i.e., no
   // summary)
-  if (m_f.getName().equals("main"))
+  if (m_f.getName() == "main")
     return;
 
   // -- anything that is live at entry should be live at every block

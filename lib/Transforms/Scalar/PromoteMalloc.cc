@@ -1,6 +1,6 @@
-#include "llvm/Pass.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstIterator.h"
+#include "llvm/IR/Module.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -21,7 +21,7 @@ public:
       return false;
 
     // -- only promote mallocs in top level functions
-    if (!F.getName().equals("main"))
+    if (F.getName() != "main")
       return false;
 
     bool changed = false;
@@ -39,32 +39,37 @@ public:
       if (!fn && CI.getCalledOperand())
         fn = dyn_cast<const Function>(CI.getCalledOperand()->stripPointerCasts());
 
-      if (fn && (fn->getName().equals("malloc") ||
-                 fn->getName().equals("_Znwj" /* new */) ||
-                 fn->getName().equals("_Znaj" /* new[] */))) {
+      if (fn &&
+          (fn->getName() == "malloc" || fn->getName() == "_Znwj" /* new */ ||
+           fn->getName() == "_Znaj" /* new[] */)) {
 
         unsigned addrSpace = 0;
         Value *nv = nullptr;
         if (auto *ci = dyn_cast<Constant>(CI.getOperand(0))) {
           // malloc(0) == nullptr
-          if (fn->getName().equals("malloc") && ci->isZeroValue()) {
+          if (fn->getName() == "malloc" && ci->isZeroValue()) {
             nv = Constant::getNullValue(CI.getType());
           }
         }
 
         if (!nv) {
-          auto ai = new AllocaInst(v->getType()->getPointerElementType(),
+          // With LLVM 20 opaque pointers, malloc returns ptr (opaque)
+          // Allocate i8 array matching malloc's byte-level allocation semantics
+          auto ai = new AllocaInst(Type::getInt8Ty(F.getContext()),
                                    addrSpace, CI.getOperand(0), "malloc", &I);
           // -- set alignment based on stack, not alignment of the type
-          ai->setAlignment(F.getParent()->getDataLayout().getStackAlignment());
+          // Handle MaybeAlign → Align conversion
+          if (MaybeAlign StackAlign = F.getParent()->getDataLayout().getStackAlignment()) {
+            ai->setAlignment(*StackAlign);
+          }
           nv = ai;
         }
         v->replaceAllUsesWith(nv);
 
         changed = true;
-      } else if (fn && (fn->getName().equals("free") ||
-                        fn->getName().equals("_ZdlPv" /* delete */) ||
-                        fn->getName().equals("_ZdaPv" /* delete[] */)))
+      } else if (fn && (fn->getName() == "free" ||
+                        fn->getName() == "_ZdlPv" /* delete */ ||
+                        fn->getName() == "_ZdaPv" /* delete[] */))
         kill.push_back(&I);
     }
 

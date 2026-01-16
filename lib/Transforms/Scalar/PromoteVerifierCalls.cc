@@ -5,12 +5,12 @@
 
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/IR/InstIterator.h"
-
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/InstIterator.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include "boost/range.hpp"
-#include "llvm/Support/raw_ostream.h"
 
 #include "seahorn/Support/SeaDebug.h"
 #include "seahorn/Support/SeaLog.hh"
@@ -133,7 +133,7 @@ bool PromoteVerifierCalls::runOnModule(Module &M) {
     LLVMUsed->eraseFromParent();
   }
   // re-create llvm.used
-  Type *i8PTy = Type::getInt8PtrTy(M.getContext());
+  Type *i8PTy = Type::getInt8Ty(M.getContext())->getPointerTo();
   MergedVars.push_back(
       ConstantExpr::getBitCast(cast<llvm::Constant>(m_assumeFn), i8PTy));
   MergedVars.push_back(
@@ -239,7 +239,7 @@ bool PromoteVerifierCalls::runOnFunction(Function &F) {
     if (fn && !fn->empty() && IgnoreDefinedVerifierFunctions)
       continue;
 
-    if (fn && (fn->getName().startswith("sea_nd"))) {
+    if (fn && (fn->getName().starts_with("sea_nd"))) {
       IRBuilder<> Builder(F.getContext());
       Builder.SetInsertPoint(&I);
       CallInst *ci;
@@ -266,16 +266,16 @@ bool PromoteVerifierCalls::runOnFunction(Function &F) {
       toKill.push_back(&I);
     }
 
-    if (fn && (fn->getName().equals("__VERIFIER_assume") ||
-               fn->getName().equals("__VERIFIER_assert") ||
-               fn->getName().equals("__SEA_assume") ||
-               fn->getName().equals("__VERIFIER_assert_not") ||
+    if (fn && (fn->getName() == "__VERIFIER_assume" ||
+               fn->getName() == "__VERIFIER_assert" ||
+               fn->getName() == "__SEA_assume" ||
+               fn->getName() == "__VERIFIER_assert_not" ||
                // CBMC
-               fn->getName().equals("__CPROVER_assume") ||
+               fn->getName() == "__CPROVER_assume" ||
                /** pagai embedded invariants */
-               fn->getName().equals("llvm.invariant") ||
+               fn->getName() == "llvm.invariant" ||
                /** my suggested name for pagai invariants */
-               fn->getName().equals("pagai.invariant"))) {
+               fn->getName() == "pagai.invariant")) {
       auto arg0 = CI.getOperand(0);
 
       CallInst *nfnCi = nullptr, *chkCi = nullptr;
@@ -283,11 +283,11 @@ bool PromoteVerifierCalls::runOnFunction(Function &F) {
         // Selects proper synthesis call.
         Function *nfn;
         bool insert_assume;
-        if (fn->getName().equals("__VERIFIER_assume") ||
-            fn->getName().equals("__SEA_assume")) {
+        if (fn->getName() == "__VERIFIER_assume" ||
+            fn->getName() == "__SEA_assume") {
           nfn = m_synthAssumeFn;
           insert_assume = true;
-        } else if (fn->getName().equals("__VERIFIER_assert")) {
+        } else if (fn->getName() == "__VERIFIER_assert") {
           nfn = m_synthAssertFn;
           insert_assume = false;
         } else {
@@ -304,19 +304,19 @@ bool PromoteVerifierCalls::runOnFunction(Function &F) {
       } else {
         // Selects proper verification call.
         Function *nfn;
-        if (fn->getName().equals("__SEA_assume"))
+        if (fn->getName() == "__SEA_assume")
           nfn = m_assumeFn;
-        else if (fn->getName().equals("__VERIFIER_assume"))
+        else if (fn->getName() == "__VERIFIER_assume")
           nfn = m_assumeFn;
-        else if (fn->getName().equals("llvm.invariant"))
+        else if (fn->getName() == "llvm.invariant")
           nfn = m_assumeFn;
-        else if (fn->getName().equals("pagai.invariant"))
+        else if (fn->getName() == "pagai.invariant")
           nfn = m_assumeFn;
-        else if (fn->getName().equals("__VERIFIER_assert"))
+        else if (fn->getName() == "__VERIFIER_assert")
           nfn = m_assertFn;
-        else if (fn->getName().equals("__VERIFIER_assert_not"))
+        else if (fn->getName() == "__VERIFIER_assert_not")
           nfn = m_assertNotFn;
-        else if (fn->getName().equals("__CPROVER_assume"))
+        else if (fn->getName() == "__CPROVER_assume")
           nfn = m_assumeFn;
         else
           assert(0);
@@ -335,7 +335,7 @@ bool PromoteVerifierCalls::runOnFunction(Function &F) {
 
       // Remove the original instruction.
       toKill.push_back(&I);
-    } else if (fn && fn->getName().equals("__VERIFIER_error")) {
+    } else if (fn && fn->getName() == "__VERIFIER_error") {
       IRBuilder<> Builder(F.getContext());
       Builder.SetInsertPoint(&I);
       CallInst *ci = Builder.CreateCall(m_errorFn);
@@ -344,10 +344,10 @@ bool PromoteVerifierCalls::runOnFunction(Function &F) {
         (*cg)[&F]->addCalledFunction(ci, (*cg)[ci->getCalledFunction()]);
 
       toKill.push_back(&I);
-    } else if (fn && (fn->getName().equals("__SEAHORN_fail") ||
+    } else if (fn && (fn->getName() == "__SEAHORN_fail" ||
                       /* map __llbmc_assert to seahorn.fail to support legacy
                          frontend */
-                      fn->getName().equals("__llbmc_assert"))) {
+                      fn->getName() == "__llbmc_assert")) {
       Function *main = F.getParent()->getFunction("main");
       if (!main || main != &F) {
         errs() << "__SEAHORN_fail can only be called from the main function.\n";
@@ -364,9 +364,11 @@ bool PromoteVerifierCalls::runOnFunction(Function &F) {
       toKill.push_back(&I);
     } else if (fn && functionMap.count(fn->getName())) {
       replaceFn(I, functionMap.at(fn->getName()), F, toKill, cg);
-    } else if (fn && (fn->getName().equals(
-                         "__VERIFIER_assert_if"))) { // sea_assert_if is the
-                                                     // user facing name
+    } else if (fn &&
+               (fn->getName() == "__VERIFIER_assert_if")) { // sea_assert_if
+                                                            // is the user
+                                                            // facing name
+      // user facing name
       IRBuilder<> Builder(F.getContext());
       // arg0: antecedent
       // arg1: consequent

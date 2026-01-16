@@ -1,3 +1,5 @@
+set (SEAPP_LLVM_SEAHORN_LIBS ${LLVM_SEAHORN_LIBS})
+
 set (USED_LIBS 
   SeaTransformsScalar
   SeaTransformsUtils
@@ -6,7 +8,7 @@ set (USED_LIBS
   SeaSmt
   ${SEA_DSA_LIBS}  
   SeaSupport
-  ${LLVM_SEAHORN_LIBS}
+  ${SEAPP_LLVM_SEAHORN_LIBS}
   ${Boost_SYSTEM_LIBRARY}
   SeaLlvmIpo
   ${GMP_LIB}

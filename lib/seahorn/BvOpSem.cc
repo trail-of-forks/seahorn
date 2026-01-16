@@ -395,7 +395,7 @@ struct OpSemVisitor : public InstVisitor<OpSemVisitor>, OpSemBase {
 
   void visitReturnInst(ReturnInst &I) {
     // -- skip return argument of main
-    if (I.getParent()->getParent()->getName().equals("main"))
+    if (I.getParent()->getParent()->getName() == "main")
       return;
 
     if (I.getNumOperands() > 0)
@@ -572,16 +572,16 @@ struct OpSemVisitor : public InstVisitor<OpSemVisitor>, OpSemBase {
       return;
     }
 
-    if (F.getName().startswith("verifier.assume")) {
+    if (F.getName().starts_with("verifier.assume")) {
       Expr c = lookup(*CB.getOperand(0));
-      if (F.getName().equals("verifier.assume.not"))
+      if (F.getName() == "verifier.assume.not")
         c = boolop::lneg(c);
 
       assert(m_fparams.size() == 3);
       // -- assumption is only active when error flag is false
       if (!isOpX<TRUE>(c))
         addCondSide(boolop::lor(m_s.read(m_sem.errorFlag(BB)), c));
-    } else if (F.getName().equals("calloc") && m_inMem && m_outMem &&
+    } else if (F.getName() == "calloc" && m_inMem && m_outMem &&
                m_sem.isTracked(I)) {
       havoc(I);
       assert(m_fparams.size() == 3);
@@ -596,7 +596,7 @@ struct OpSemVisitor : public InstVisitor<OpSemVisitor>, OpSemBase {
         side(m_outMem,
              op::array::constArray(bv::bvsort(ptrSz(), m_efac), nullBv));
       }
-    } else if (F.getName().startswith("smt.extract.")) {
+    } else if (F.getName().starts_with("smt.extract.")) {
 
       auto *arg0 = dyn_cast<ConstantInt>(CB.getOperand(0));
       auto *arg1 = dyn_cast<ConstantInt>(CB.getOperand(1));
@@ -663,8 +663,8 @@ struct OpSemVisitor : public InstVisitor<OpSemVisitor>, OpSemBase {
       m_fparams.push_back(falseE);
       m_fparams.push_back(falseE);
       m_fparams.push_back(falseE);
-    } else if (F.getName().startswith("shadow.mem") && m_sem.isTracked(I)) {
-      if (F.getName().equals("shadow.mem.init")) {
+    } else if (F.getName().starts_with("shadow.mem") && m_sem.isTracked(I)) {
+      if (F.getName() == "shadow.mem.init") {
         m_s.havoc(symb(I));
         unsigned id = shadow_dsa::getShadowId(CB);
         assert(id >= 0);
@@ -704,7 +704,7 @@ struct OpSemVisitor : public InstVisitor<OpSemVisitor>, OpSemBase {
           addAlignConstraint(memStartE, ptrSz() / 8 /*bytes*/);
         }
 
-      } else if (F.getName().equals("shadow.mem.load")) {
+      } else if (F.getName() == "shadow.mem.load") {
         const Value &v = *CB.getOperand(1);
         m_inMem = m_s.read(symb(v));
         m_uniq = extractUniqueScalar(CB) != nullptr;
@@ -712,7 +712,7 @@ struct OpSemVisitor : public InstVisitor<OpSemVisitor>, OpSemBase {
           m_cur_startMem = memStart(shadow_dsa::getShadowId(CB));
           m_cur_endMem = memEnd(shadow_dsa::getShadowId(CB));
         }
-      } else if (F.getName().equals("shadow.mem.store")) {
+      } else if (F.getName() == "shadow.mem.store") {
         m_inMem = m_s.read(symb(*CB.getOperand(1)));
         m_outMem = m_s.havoc(symb(I));
         m_uniq = extractUniqueScalar(CB) != nullptr;
@@ -720,7 +720,7 @@ struct OpSemVisitor : public InstVisitor<OpSemVisitor>, OpSemBase {
           m_cur_startMem = memStart(shadow_dsa::getShadowId(CB));
           m_cur_endMem = memEnd(shadow_dsa::getShadowId(CB));
         }
-      } else if (F.getName().equals("shadow.mem.global.init")) {
+      } else if (F.getName() == "shadow.mem.global.init") {
         m_inMem = m_s.read(symb(*CB.getOperand(1)));
         m_outMem = m_s.havoc(symb(I));
         if (PartMem) {
@@ -728,21 +728,19 @@ struct OpSemVisitor : public InstVisitor<OpSemVisitor>, OpSemBase {
           m_cur_endMem = memEnd(shadow_dsa::getShadowId(CB));
         }
         m_side.push_back(mk<EQ>(m_outMem, m_inMem));
-      } else if (F.getName().equals("shadow.mem.arg.ref"))
+      } else if (F.getName() == "shadow.mem.arg.ref")
         m_fparams.push_back(m_s.read(symb(*CB.getOperand(1))));
-      else if (F.getName().equals("shadow.mem.arg.mod")) {
+      else if (F.getName() == "shadow.mem.arg.mod") {
         m_fparams.push_back(m_s.read(symb(*CB.getOperand(1))));
         m_fparams.push_back(m_s.havoc(symb(I)));
-      } else if (F.getName().equals("shadow.mem.arg.new"))
+      } else if (F.getName() == "shadow.mem.arg.new")
         m_fparams.push_back(m_s.havoc(symb(I)));
-      else if (!PF.getName().equals("main") &&
-               F.getName().equals("shadow.mem.in")) {
+      else if (PF.getName() != "main" && F.getName() == "shadow.mem.in") {
         m_s.read(symb(*CB.getOperand(1)));
-      } else if (!PF.getName().equals("main") &&
-                 F.getName().equals("shadow.mem.out")) {
+      } else if (PF.getName() != "main" && F.getName() == "shadow.mem.out") {
         m_s.read(symb(*CB.getOperand(1)));
-      } else if (!PF.getName().equals("main") &&
-                 F.getName().equals("shadow.mem.arg.init")) {
+      } else if (PF.getName() != "main" &&
+                 F.getName() == "shadow.mem.arg.init") {
         // regions initialized in main are global. We want them to
         // flow to the arguments
         /* do nothing */
@@ -861,7 +859,7 @@ struct OpSemVisitor : public InstVisitor<OpSemVisitor>, OpSemBase {
         side(mk<BULT>(op0, m_largestPtr));
 
         /// addresses must be aligned
-        unsigned sz = I.getAlignment();
+        unsigned sz = I.getAlign().value();
         addAlignConstraint(op0, sz);
       }
 
@@ -935,7 +933,7 @@ struct OpSemVisitor : public InstVisitor<OpSemVisitor>, OpSemBase {
 
           side(mk<BULT>(idx, m_largestPtr));
           /// addresses must be aligned
-          unsigned sz = I.getAlignment();
+          unsigned sz = I.getAlign().value();
           addAlignConstraint(idx, sz);
         }
         side(m_outMem, op::array::store(m_inMem, idx, v));
@@ -965,7 +963,7 @@ struct OpSemVisitor : public InstVisitor<OpSemVisitor>, OpSemBase {
     const Function &F = *BB.getParent();
     if (&F.getEntryBlock() != &BB)
       return;
-    if (!F.getName().equals("main"))
+    if (F.getName() != "main")
       return;
 
     const Module &M = *F.getParent();
@@ -1179,11 +1177,10 @@ Expr BvOpSem::symb(const Value &I) {
   if (isShadowMem(I, &scalar)) {
     if (scalar) {
       assert(scalar->getType()->isPointerTy());
-      Type &eTy = *cast<PointerType>(scalar->getType())->getElementType();
+      unsigned sz = pointerSizeInBits();
       // -- create a constant with the name v[scalar]
       return bv::bvConst(
-          op::array::select(v, mkTerm<const Value *>(scalar, m_efac)),
-          sizeInBits(eTy));
+          op::array::select(v, mkTerm<const Value *>(scalar, m_efac)), sz);
     }
 
     if (m_trackLvl >= MEM) {
@@ -1230,7 +1227,7 @@ bool BvOpSem::isTracked(const Value &v) const {
     if (v.hasOneUse())
       if (const CallInst *ci = dyn_cast<const CallInst>(*v.user_begin()))
         if (const Function *fn = ci->getCalledFunction())
-          if (fn->getName().startswith("shadow.mem"))
+          if (fn->getName().starts_with("shadow.mem"))
             return false;
 
     return m_trackLvl >= PTR;

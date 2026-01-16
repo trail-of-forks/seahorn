@@ -643,11 +643,13 @@ bool mayBeVirtualCall(const CallBase &CB) {
     return false;
   }
 
+#if LLVM_VERSION_MAJOR < 18
   const FunctionType *CB_type = dyn_cast<FunctionType>(
       CB.getCalledOperand()->getType()->getPointerElementType());
   if (!CB_type) {
     return false;
   }
+
   // Assume the first argument of CB is this, otherwise we bail out ...
   const Value *this_ = CB.getOperand(0);
   if (this_->getType()->isPointerTy()) {
@@ -656,6 +658,7 @@ bool mayBeVirtualCall(const CallBase &CB) {
       return true;
     }
   }
+#endif
   return false;
 }
 
@@ -672,14 +675,18 @@ bool ClassHierarchyAnalysis_Impl::resolveVirtualCall(const CallBase &CB,
     return false;
   }
 
+#if LLVM_VERSION_MAJOR < 18
   const FunctionType *CB_type = dyn_cast<FunctionType>(
       CB.getCalledOperand()->getType()->getPointerElementType());
   if (!CB_type) {
     return false;
   }
+#endif
   // Assume the first argument of CS is this, otherwise we bail out ...
   const Value *this_ = CB.getOperand(0);
   if (this_->getType()->isPointerTy()) {
+
+#if LLVM_VERSION_MAJOR < 18
     if (const StructType *this_type =
             dyn_cast<StructType>(this_->getType()->getPointerElementType())) {
 
@@ -718,6 +725,7 @@ bool ClassHierarchyAnalysis_Impl::resolveVirtualCall(const CallBase &CB,
       }
       return true;
     }
+#endif
   }
 
   WARN << "Cannot resolve virtual call " << CB

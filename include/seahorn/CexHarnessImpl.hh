@@ -1,6 +1,7 @@
 #pragma once
 #include "seahorn/CexHarness.hh"
 
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/IRBuilder.h"
@@ -89,7 +90,7 @@ void dumpLLVMCex(BmcTraceWrapper<Trace> &trace, StringRef CexFile,
   }
   assert(!error_code);
   verifyModule(*Harness, &errs());
-  if (CexFile.endswith(".ll"))
+  if (CexFile.ends_with(".ll"))
     out.os() << *Harness;
   else
     WriteBitcodeToFile(*Harness, out.os());
@@ -131,7 +132,7 @@ createCexHarness(BmcTraceWrapper<Trace> &trace, const DataLayout &dl,
         LOG("cex_verbose",
             errs() << "Considering harness for: " << CF->getName() << "\n";);
 
-        if (CF->getName().equals("shadow.mem.init")) {
+        if (CF->getName() == "shadow.mem.init") {
           unsigned id = shadow_dsa::getShadowId(*ci);
           ExprFactory &efac = trace.efac();
           Expr sort = bv::bvsort(dl.getPointerSizeInBits(), efac);
@@ -158,7 +159,7 @@ createCexHarness(BmcTraceWrapper<Trace> &trace, const DataLayout &dl,
                          << "Producing harness for " << CF->getName() << "\n";);
           continue;
         }
-        if (CF->getName().equals("memhavoc")) {
+        if (CF->getName() == "memhavoc") {
           LOG("cex", errs()
                          << "Producing harness for " << CF->getName() << "\n";);
           // previous instruction should be
@@ -170,7 +171,7 @@ createCexHarness(BmcTraceWrapper<Trace> &trace, const DataLayout &dl,
             const Value *prevCV = prevCi->getCalledOperand();
             const Function *prevCF =
                 dyn_cast<Function>(prevCV->stripPointerCasts());
-            if (!(prevCF && prevCF->getName().equals("shadow.mem.load"))) {
+            if (!(prevCF && prevCF->getName() == "shadow.mem.load")) {
               LOG("cex", errs()
                              << "Skipping harness for " << CF->getName()
                              << " because shadow.mem.load cannot be found\n");
@@ -219,7 +220,7 @@ createCexHarness(BmcTraceWrapper<Trace> &trace, const DataLayout &dl,
         // We want to ignore seahorn functions, but not nondet
         // functions created by strip-extern or dummyMainFunction
         if (CF->getName().find_first_of('.') != StringRef::npos &&
-            !CF->getName().startswith("verifier.nondet"))
+            !CF->getName().starts_with("verifier.nondet"))
           continue;
         if (!CF->isExternalLinkage(CF->getLinkage()))
           continue;
@@ -233,7 +234,7 @@ createCexHarness(BmcTraceWrapper<Trace> &trace, const DataLayout &dl,
         }
 
         // KleeInternalize
-        if (CF->getName().equals("calloc"))
+        if (CF->getName() == "calloc")
           continue;
 
         // -- known library function
@@ -273,11 +274,11 @@ createCexHarness(BmcTraceWrapper<Trace> &trace, const DataLayout &dl,
       pRT = RT->getPointerTo();
     } else if (RT->isIntegerTy()) {
       TypeSize tsz = dl.getTypeStoreSizeInBits(RT);
-      auto bitsz = tsz.getFixedSize();
+      auto bitsz = tsz.getFixedValue();
       eRT = Type::getIntNTy(TheContext, bitsz);
       pRT = eRT->getPointerTo();
     } else {
-      pRT = Type::getInt8PtrTy(TheContext);
+      pRT = Type::getInt8Ty(TheContext)->getPointerTo();
     }
 
     ArrayType *AT = nullptr;
@@ -285,7 +286,7 @@ createCexHarness(BmcTraceWrapper<Trace> &trace, const DataLayout &dl,
     // Convert Expr to LLVM constants
     SmallVector<Constant *, 20> LLVMarray;
     if (RT->isVoidTy()) {
-      if (!CF->getName().equals("memhavoc")) {
+      if (CF->getName() != "memhavoc") {
         continue;
       }
 
@@ -346,7 +347,7 @@ createCexHarness(BmcTraceWrapper<Trace> &trace, const DataLayout &dl,
                RT->isVoidTy() /* memhavoc */) {
       Type *elmTy = nullptr;
       if (RT->isPointerTy())
-        elmTy = RT->getPointerElementType();
+        elmTy = RT;
       else if (RT->isVoidTy())
         elmTy =
             Type::getVoidTy(TheContext); // not interested in ebits for memhavoc
@@ -358,7 +359,13 @@ createCexHarness(BmcTraceWrapper<Trace> &trace, const DataLayout &dl,
 
       // If we can tell how big the return type is, tell the
       // callback function.  Otherwise pass zero.
-      if (elmTy->isSized())
+      if (elmTy->isPointerTy()) {
+        // pointer size in bits (most meaningful thing we can compute under
+        // opaque ptrs)
+        unsigned AS = cast<PointerType>(RT)->getAddressSpace();
+        unsigned bits = dl.getPointerSizeInBits(AS);
+        Args.push_back(ConstantInt::get(Type::getInt32Ty(TheContext), bits));
+      } else if (elmTy->isSized())
         Args.push_back(ConstantInt::get(Type::getInt32Ty(TheContext),
                                         dl.getTypeStoreSizeInBits(elmTy)));
       else
@@ -369,9 +376,9 @@ createCexHarness(BmcTraceWrapper<Trace> &trace, const DataLayout &dl,
     }
     Type *GetType = RT->isVoidTy() ? pRT : RT;
     FunctionCallee GetValue = Harness->getOrInsertFunction(
-        name, FunctionType::get(GetType, makeArrayRef(ArgTypes), false));
+        name, FunctionType::get(GetType, ArrayRef(ArgTypes), false));
     assert(GetValue);
-    Value *RetValue = Builder.CreateCall(GetValue, makeArrayRef(Args));
+    Value *RetValue = Builder.CreateCall(GetValue, ArrayRef(Args));
 
     if (RT->isVoidTy()) {
       // void memcpy(i8* dst, i8* src, size_t block_len)
@@ -389,7 +396,7 @@ createCexHarness(BmcTraceWrapper<Trace> &trace, const DataLayout &dl,
   {
     Type *intTy = IntegerType::get(TheContext, 64);
     Type *intPtrTy = dl.getIntPtrType(TheContext, 0);
-    Type *i8PtrTy = Type::getInt8PtrTy(TheContext, 0);
+    Type *i8PtrTy = Type::getInt8Ty(TheContext)->getPointerTo();
 
     // Hook for gdb-like tools. Used to translate virtual addresses to
     // physical ones if that's the case. This is useful so we can

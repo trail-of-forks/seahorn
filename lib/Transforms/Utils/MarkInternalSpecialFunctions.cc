@@ -40,7 +40,8 @@ struct MarkInternalAllocOrDeallocInline : public ModulePass {
     for (inst_iterator i = inst_begin(F), e = inst_end(F); i != e; ++i) {
       Instruction *I = &*i;
       if (CallInst *CI = dyn_cast<CallInst>(I)) {
-        if (isAllocationFn(CI, TLI) || isFreeCall(CI, TLI)) {
+        // LLVM 20: isFreeCall replaced with getFreedOperand
+        if (isAllocationFn(CI, TLI) || getFreedOperand(CI, TLI) != nullptr) {
           F.addFnAttr(Attribute::AlwaysInline);
           LOG("inline", errs() << "INLINED FUNCTION (DE)ALLOCATING MEMORY "
                                << F.getName() << "\n");

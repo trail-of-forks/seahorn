@@ -2,6 +2,7 @@
    Not used. Should be removed when deprecated expressions are removed.
  */
 #include "ufo/deprecated/Expr.hh"
+#include "seahorn/Support/CompatFunctional.hh"
 
 using namespace expr;
 

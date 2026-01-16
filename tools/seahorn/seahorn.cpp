@@ -283,7 +283,9 @@ int main(int argc, char **argv) {
   llvm::initializeScalarOpts(Registry);
   llvm::initializeIPO(Registry);
   llvm::initializeCallGraphWrapperPassPass(Registry);
+#if LLVM_VERSION_MAJOR < 18
   llvm::initializeCallGraphPrinterLegacyPassPass(Registry);
+#endif
   llvm::initializeCallGraphViewerPass(Registry);
   // XXX: not sure if needed anymore
   llvm::initializeGlobalsAAWrapperPassPass(Registry);
@@ -310,16 +312,21 @@ int main(int argc, char **argv) {
   auto PreserveMain = [=](const llvm::GlobalValue &GV) {
     return GV.getName() == "main";
   };
+#if LLVM_VERSION_MAJOR < 18
   pass_manager.add(llvm::createInternalizePass(PreserveMain));
   pass_manager.add(llvm::createGlobalDCEPass()); // kill unused internal global
+#endif
   pass_manager.add(seahorn::createGeneratePartialFnPass());
 
   if (InlineAll) {
     pass_manager.add(seahorn::createMarkInternalInlinePass());
     pass_manager.add(llvm::createAlwaysInlinerLegacyPass());
+#if LLVM_VERSION_MAJOR < 18
     pass_manager.add(
         llvm::createGlobalDCEPass()); // kill unused internal global
+#endif
   }
+
   pass_manager.add(new seahorn::RemoveUnreachableBlocksPass());
 
   pass_manager.add(seahorn::createPromoteMallocPass());
@@ -338,16 +345,22 @@ int main(int argc, char **argv) {
   pass_manager.add(new seahorn::LowerCstExprPass());
   pass_manager.add(llvm::createDeadCodeEliminationPass());
 
+#if LLVM_VERSION_MAJOR < 18
   pass_manager.add(llvm::createUnifyFunctionExitNodesPass());
+#endif
 
   // -- it invalidates DSA passes so it should be run before
   // -- ShadowMem
+#if LLVM_VERSION_MAJOR < 18
   pass_manager.add(llvm::createGlobalDCEPass()); // kill unused internal global
+#endif
 
   // -- initialize any global variables that are left
   if (LowerGlobalInitializers) {
     pass_manager.add(new seahorn::LowerGvInitializers());
+#if LLVM_VERSION_MAJOR < 18
     pass_manager.add(llvm::createFunctionInliningPass());
+#endif
   }
 
   pass_manager.add(seadsa::createRemovePtrToIntPass());

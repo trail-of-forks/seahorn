@@ -239,10 +239,10 @@ public:
       if (fn.hasAddressTaken()) {
         // XXX hard-coded. should be based on use
         // XXX some functions have their address taken for llvm.used
-        if (fn.getName().equals("verifier.error") ||
-            fn.getName().startswith("verifier.assume") ||
-            fn.getName().equals("seahorn.fail") ||
-            fn.getName().startswith("shadow.mem"))
+        if (fn.getName() == "verifier.error" ||
+            fn.getName().starts_with("verifier.assume") ||
+            fn.getName() == "seahorn.fail" ||
+            fn.getName().starts_with("shadow.mem"))
           continue;
         OpSemAllocator::falloc(fn, m_mem.getAlignment(fn));
       }
@@ -251,11 +251,11 @@ public:
     for (const GlobalVariable &gv : M.globals()) {
       if (m_sem.isSkipped(gv))
         continue;
-      if (gv.getSection().equals("llvm.metadata")) {
+      if (gv.getSection() == "llvm.metadata") {
         continue;
       }
-      if (gv.getName().equals("llvm.global_ctors") ||
-          gv.getName().equals("llvm.global_dtors")) {
+      if (gv.getName() == "llvm.global_ctors" ||
+          gv.getName() == "llvm.global_dtors") {
         continue;
       }
       uint64_t bytes = m_sem.getTD().getTypeAllocSize(gv.getValueType());
@@ -289,16 +289,16 @@ public:
 
   /// \brief Pre-allocate memory for alloca
   void preAlloc(const AllocaInst &inst) {
-    Type *ty = inst.getType()->getElementType();
+    Type *ty = inst.getAllocatedType();
     unsigned typeSz = (size_t)m_sem.getTD().getTypeAllocSize(ty);
 
     if (const Constant *cv = dyn_cast<const Constant>(inst.getOperand(0))) {
       ConstantExprEvaluator ce(m_sem.getDataLayout());
       auto ogv = ce.evaluate(cv);
-      if (!ogv.hasValue()) {
+      if (!ogv.has_value()) {
         llvm_unreachable(nullptr);
       }
-      unsigned nElts = ogv.getValue().IntVal.getZExtValue();
+      unsigned nElts = ogv.value().IntVal.getZExtValue();
       unsigned memSz = typeSz * nElts;
       preAlloc(inst, memSz, true);
     } else {

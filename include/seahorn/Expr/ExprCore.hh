@@ -5,6 +5,7 @@
 #include <boost/intrusive_ptr.hpp>
 #include <boost/pool/pool.hpp>
 #include "seahorn/boost_ptr_vector.hh"
+#include "seahorn/Support/CompatFunctional.hh"
 
 #include <iostream>
 #include <map>

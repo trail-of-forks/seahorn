@@ -8,6 +8,7 @@
  **/
 
 #include "seahorn/Support/CFG.hh"
+#include "seahorn/Support/CompatFunctional.hh"
 #include "seahorn/Transforms/Utils/NameValues.hh"
 #include "seahorn/config.h"
 
@@ -75,7 +76,7 @@ static bool isInteger(const Value &v) { return isInteger(v.getType()); }
 static boost::optional<int64_t> getIntConstant(const ConstantInt *CI) {
   if (CI->getType()->isIntegerTy(1)) {
     return (int64_t)CI->getZExtValue();
-  } else if (CI->getValue().getMinSignedBits() <= 64) {
+  } else if (CI->getValue().getNumSignBits() <= 64) {
     return CI->getSExtValue();
   } else {
     llvm::errs() << "Warning: " << *CI << " does not fit in int64_t.";
@@ -90,20 +91,19 @@ static bool isBoolToInt(const CastInst &I) {
           I.getSrcTy()->isIntegerTy(1));
 }
 static bool isAssertFn(const Function *F) {
-  return (F->getName().equals("verifier.assert"));
+  return (F->getName() == "verifier.assert");
 }
 static bool isErrorFn(const Function *F) {
-  return (F->getName().equals("seahorn.fail") ||
-          F->getName().equals("seahorn.error") ||
-          F->getName().equals("verifier.error") ||
-          F->getName().equals("__VERIFIER_error") ||
-          F->getName().equals("__SEAHORN_error"));
+  return (F->getName() == "seahorn.fail" || F->getName() == "seahorn.error" ||
+          F->getName() == "verifier.error" ||
+          F->getName() == "__VERIFIER_error" ||
+          F->getName() == "__SEAHORN_error");
 }
 static bool isAssumeFn(const Function *F) {
-  return (F->getName().equals("verifier.assume"));
+  return (F->getName() == "verifier.assume");
 }
 static bool isNotAssumeFn(const Function *F) {
-  return (F->getName().equals("verifier.assume.not"));
+  return (F->getName() == "verifier.assume.not");
 }
 #if 0
 static bool isVerifierCall(const Function *F) {
@@ -181,7 +181,7 @@ bool instruction_factory::is_tracked(const Type *ty) {
 
 bool instruction_factory::is_tracked(const Value &v) {
   // -- ignore any shadow variable created by seahorn
-  if (v.getName().startswith("shadow.mem"))
+  if (v.getName().starts_with("shadow.mem"))
     return false;
   return is_tracked(v.getType());
 }
@@ -637,7 +637,7 @@ public:
         m_bb += m_ifac.mk_error();
       } else {
         // -- ignore shadow memory functions created by seahorn
-        if (!callee->getName().startswith("shadow.mem"))
+        if (!callee->getName().starts_with("shadow.mem"))
           m_bb += m_ifac.mk_call(I);
       }
     }
@@ -939,7 +939,7 @@ public:
     for (Function &F : M) {
       m_tli = &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F);
       // -- ignore shadow memory functions created by seahorn
-      if (F.getName().startswith("shadow.mem"))
+      if (F.getName().starts_with("shadow.mem"))
         continue;
       runOnFunction(F);
     }
@@ -980,10 +980,10 @@ public:
         //   continue;
         // }
         auto absDomOpt = m_clam->getPre(&B);
-        if (absDomOpt.hasValue()) {
+        if (absDomOpt.has_value()) {
           crab::crab_string_os out;
           clam::lin_cst_sys_t csts =
-              absDomOpt.getValue().to_linear_constraint_system();
+              absDomOpt.value().to_linear_constraint_system();
           typename clam::lin_cst_sys_t::iterator it = csts.begin();
           typename clam::lin_cst_sys_t::iterator et = csts.end();
           for (; it != et;) {

@@ -222,9 +222,6 @@ public:
   /// \brief Converts a raw ptr to fat ptr with default value for fat
   PtrTy mkFatPtr(MainPtrTy mainPtr) const;
 
-  /// \brief Assembles a fat ptr from parts
-  PtrTy mkFatPtr(llvm::SmallVector<AnyPtrTy, 8> slots) const;
-
   /// \brief Update a given fat pointer with a "main" address value
   PtrTy updateFatPtr(MainPtrTy mainPtr, PtrTy fat) const;
 

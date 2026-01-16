@@ -38,7 +38,9 @@ seahorn::PathBmcTrace seahorn::PathBmcEngine::getTrace() {
 #include "clam/CrabDomain.hh"
 #include "clam/CrabDomainParser.hh"
 #include "clam/HeapAbstraction.hh"
+
 #include "clam/SeaDsaHeapAbstraction.hh"
+#include <optional>
 
 #include "seadsa/Global.hh"
 #include "seadsa/SeaMemorySSA.hh"
@@ -278,21 +280,21 @@ void PathBmcEngine::loadCrabInvariants(
   clam::lin_cst_unordered_map<Expr> cache;
   for (const BasicBlock &bb : *m_fn) {
 
-    // -- Get crab invariants 
-    llvm::Optional<clam::clam_abstract_domain> preOpt = crab.getPre(&bb);
-    if (!preOpt.hasValue()) {
+    // -- Get crab invariants
+    std::optional<clam::clam_abstract_domain> preOpt = crab.getPre(&bb);
+    if (!preOpt.has_value()) {
       continue;
     }
-    if (preOpt.getValue().is_top()) {
+    if (preOpt.value().is_top()) {
       continue;
     }
-    clam::clam_abstract_domain pre = preOpt.getValue();
+    clam::clam_abstract_domain pre = preOpt.value();
 
     // -- Cleanup of the crab invariants by removing dead variables.
-    llvm::Optional<clam::varset_t> live_vars = cfgBuilder->getLiveSymbols(&bb);
-    if (live_vars.hasValue()) {
-      std::vector<clam::var_t> proj_vars(live_vars.getValue().begin(),
-					 live_vars.getValue().end());
+    std::optional<clam::varset_t> live_vars = cfgBuilder->getLiveSymbols(&bb);
+    if (live_vars.has_value()) {
+      std::vector<clam::var_t> proj_vars(live_vars.value().begin(),
+                                         live_vars.value().end());
       pre.project(proj_vars);
     }
 

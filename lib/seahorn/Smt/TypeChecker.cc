@@ -6,6 +6,7 @@
 #include "seahorn/Support/SeaDebug.h"
 #include "seahorn/Support/SeaLog.hh"
 #include "llvm/Support/raw_ostream.h"
+#include "seahorn/Support/CompatFunctional.hh"
 
 using namespace expr;
 namespace {

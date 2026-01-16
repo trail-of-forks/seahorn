@@ -8,9 +8,11 @@
 #include "seahorn/Expr/ExprOpCore.hh"
 #include "seahorn/Expr/ExprVisitor.hh"
 #include "seahorn/Expr/TypeCheckerUtils.hh"
+#include "seahorn/Support/CompatFunctional.hh"
 
 #include <array>
 #include <deque>
+#include <functional>
 
 namespace expr {
 namespace op {

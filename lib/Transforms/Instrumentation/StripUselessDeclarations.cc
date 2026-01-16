@@ -42,22 +42,24 @@ namespace
 
     bool isUseless (Function &F) {
         auto name = F.getName ();
-        if (name.startswith ("llvm.")) return false;
-        if (name.startswith ("malloc") ||
-            name.startswith ("calloc") ||
-            name.startswith ("memset") ||
-            name.startswith ("memcpy")) return false;
+        if (name.starts_with("llvm."))
+          return false;
+        if (name.starts_with("malloc") || name.starts_with("calloc") ||
+            name.starts_with("memset") || name.starts_with("memcpy"))
+          return false;
 
-        if (name.startswith ("klee_")) return false;
+        if (name.starts_with("klee_"))
+          return false;
 
-        if (name.startswith ("seahorn.") ||
-            name.startswith ("__seahorn") ||
-            name.startswith ("verifier.") ||
-	    name.startswith ("sea_dsa")) return false;
+        if (name.starts_with("seahorn.") || name.starts_with("__seahorn") ||
+            name.starts_with("verifier.") || name.starts_with("sea_dsa"))
+          return false;
 
-        if (name.startswith ("__VERIFIER")) return false;
+        if (name.starts_with("__VERIFIER"))
+          return false;
 
-        if (name.startswith ("__builtin")) return false;
+        if (name.starts_with("__builtin"))
+          return false;
 
         if (KeepLibFn) {
             if (!m_tli)

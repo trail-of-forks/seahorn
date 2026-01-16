@@ -1,5 +1,6 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
+#include "seahorn/Support/CompatFunctional.hh"
 
 #include "seahorn/Analysis/CutPointGraph.hh"
 #include "seahorn/Expr/Smt/EZ3.hh"

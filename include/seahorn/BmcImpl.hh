@@ -224,19 +224,19 @@ Out &BmcTrace<Engine, Model>::print(Out &out) {
       bool shadow_mem = false;
       if (auto *ci = dyn_cast<CallInst>(&I)) {
         const Function *f = getCalledFunction(*ci);
-        if (f && f->getName().equals("seahorn.fn.enter")) {
+        if (f && f->getName() == "seahorn.fn.enter") {
           if (ci->getDebugLoc()) {
             if (DISubprogram *fnScope =
                     getDISubprogram(ci->getDebugLoc().getScope()))
               out << "enter: " << fnScope->getName() << "\n";
           }
           continue;
-        } else if (f && f->getName().equals("shadow.mem.init")) {
+        } else if (f && f->getName() == "shadow.mem.init") {
           print_inst = false;
           shadow_mem = true;
-        } else if (f && f->getName().equals("shadow.mem.store")) {
+        } else if (f && f->getName() == "shadow.mem.store") {
           shadow_mem = true;
-        } else if (f && f->getName().equals("sea_printf")) {
+        } else if (f && f->getName() == "sea_printf") {
           if (out.has_colors())
             out.changeColor(raw_ostream::GREEN);
 
@@ -257,7 +257,7 @@ Out &BmcTrace<Engine, Model>::print(Out &out) {
           }
           if (out.has_colors())
             out.resetColor();
-        } else if (f && f->getName().equals("verifier.assert")) {
+        } else if (f && f->getName() == "verifier.assert") {
           print_lineno = true;
         }
       } else if (isa<PHINode>(I)) {

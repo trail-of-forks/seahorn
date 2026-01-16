@@ -188,7 +188,8 @@ bool UnifyAssumesPass::runOnFunction(Function &F) {
 }
 
 void UnifyAssumesPass::markAssumeAsUnified(CallInst &CI) {
-  MDNode *meta = MDNode::get(CI.getContext(), None);
+  // LLVM 20: 'None' replaced with empty ArrayRef
+  MDNode *meta = MDNode::get(CI.getContext(), ArrayRef<Metadata*>());
   CI.setMetadata(s_assumeUnifiedTag, meta);
 }
 
@@ -235,7 +236,7 @@ void UnifyAssumesPass::processCallInst(CallInst &CI, AllocaInst &flag) {
   IRBuilder<> B(bb);
   B.SetInsertPoint(&CI);
 
-  bool isNot = CI.getCalledFunction()->getName().equals("verifier.assume.not");
+  bool isNot = CI.getCalledFunction()->getName() == "verifier.assume.not";
 
   Value *cond = CI.getOperand(0);
   if (isNot)

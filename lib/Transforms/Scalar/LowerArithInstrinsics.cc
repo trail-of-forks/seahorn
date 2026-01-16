@@ -80,14 +80,16 @@ namespace
 
         if (!fn) continue;
 
-        if ((fn->getName ().startswith ("llvm.sadd.with.overflow") ||
-             fn->getName ().startswith ("llvm.uadd.with.overflow"))) {
-          replaceArithIntrinsics (Instruction::Add, dyn_cast<CallInst> (&I), "", ctx);
-        } else if ((fn->getName ().startswith ("llvm.ssub.with.overflow") ||
-                    fn->getName ().startswith ("llvm.usub.with.overflow"))) {
-          replaceArithIntrinsics (Instruction::Sub, dyn_cast<CallInst> (&I), "", ctx);
-        } else if ((fn->getName ().startswith ("llvm.smul.with.overflow") ||
-                    fn->getName ().startswith ("llvm.umul.with.overflow"))) {
+        if ((fn->getName().starts_with("llvm.sadd.with.overflow") ||
+             fn->getName().starts_with("llvm.uadd.with.overflow"))) {
+          replaceArithIntrinsics(Instruction::Add, dyn_cast<CallInst>(&I), "",
+                                 ctx);
+        } else if ((fn->getName().starts_with("llvm.ssub.with.overflow") ||
+                    fn->getName().starts_with("llvm.usub.with.overflow"))) {
+          replaceArithIntrinsics(Instruction::Sub, dyn_cast<CallInst>(&I), "",
+                                 ctx);
+        } else if ((fn->getName().starts_with("llvm.smul.with.overflow") ||
+                    fn->getName().starts_with("llvm.umul.with.overflow"))) {
           replaceArithIntrinsics (Instruction::Mul, dyn_cast<CallInst> (&I), "", ctx);
         }
       }

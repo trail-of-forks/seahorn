@@ -1,4 +1,5 @@
 #include "seahorn/LoadCrab.hh"
+#include "seahorn/Support/CompatFunctional.hh"
 #include "seahorn/Support/SeaDebug.h"
 #include "seahorn/config.h"
 
@@ -510,13 +511,13 @@ Expr LoadCrab::CrabInvToExpr(llvm::BasicBlock &B, const CfgBuilder *cfgBuilder,
   ExprFactory &efac = m_hm.getExprFactory();
   llvm::Function &fn = *(B.getParent());
   Expr e = mk<TRUE>(efac);
-  
-  llvm::Optional<clam_abstract_domain> absOpt = m_clam.getPre(&B, false);
-  if (!absOpt.hasValue()) {
+
+  std::optional<clam_abstract_domain> absOpt = m_clam.getPre(&B, false);
+  if (!absOpt.has_value()) {
     return e;
   }
 
-  auto abs = absOpt.getValue();
+  auto abs = absOpt.value();
   if (m_params.dom.isDisjunctive()) {
     DisjunctiveLinConsToExpr t(cfgBuilder, fn);
     e = t.toExpr(abs.to_disjunctive_linear_constraint_system(), efac, live);

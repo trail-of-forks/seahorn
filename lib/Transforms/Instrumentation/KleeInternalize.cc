@@ -57,7 +57,7 @@ class KleeInternalize : public ModulePass {
     m_intptrTy = m_dl->getIntPtrType(C, 0);
 
     Type *voidTy = Type::getVoidTy(C);
-    Type *i8PtrTy = Type::getInt8PtrTy(C);
+    Type *i8PtrTy = Type::getInt8Ty(C)->getPointerTo();
     Type *i32Ty = Type::getInt32Ty(C);
 
     m_assertFailFn = M.getOrInsertFunction("__assert_fail", voidTy, i8PtrTy,
@@ -84,7 +84,7 @@ class KleeInternalize : public ModulePass {
   bool shouldInternalize(const GlobalValue &GV) {
     if (!GV.isDeclaration())
       return false;
-    if (GV.getName().startswith("llvm."))
+    if (GV.getName().starts_with("llvm."))
       return false;
 
     if (!m_tli)
@@ -129,10 +129,8 @@ class KleeInternalize : public ModulePass {
       // TODO: update callgraph with this call
       CallInst *mksym = Builder.CreateCall(
           m_kleeMkSymbolicFn,
-          {Builder.CreateBitCast(v, Builder.getInt8PtrTy()), sz,
-           Builder.CreateConstGEP2_32(
-               cast<PointerType>(fname->getType())->getElementType(), fname, 0,
-               0)});
+          {Builder.CreateBitCast(v, Builder.getInt8Ty()->getPointerTo()), sz,
+           Builder.CreateConstGEP2_32(fname->getValueType(), fname, 0, 0)});
 
       (void)mksym;
       Value *retValue = Builder.CreateLoad(v->getAllocatedType(), v);
@@ -153,8 +151,7 @@ class KleeInternalize : public ModulePass {
       // are considered constant.
       if (GV->hasInitializer())
         continue;
-      GV->setInitializer(
-          Constant::getNullValue(GV->getType()->getElementType()));
+      GV->setInitializer(Constant::getNullValue(GV->getValueType()));
       LOG("verbose", errs() << "making " << GV->getName() << " non-extern\n";);
     }
   }
@@ -255,17 +252,17 @@ public:
         CallInst *ninst = nullptr;
         Builder.SetInsertPoint(&inst);
 
-        if (fn->getName().equals("verifier.assume")) {
+        if (fn->getName() == "verifier.assume") {
           ninst = Builder.CreateCall(
               m_kleeAssumeFn,
               Builder.CreateZExtOrTrunc(CB.getOperand(0), m_intptrTy));
-        } else if (fn->getName().equals("verifier.assume.not")) {
+        } else if (fn->getName() == "verifier.assume.not") {
           ninst = Builder.CreateCall(
               m_kleeAssumeFn,
               Builder.CreateZExtOrTrunc(Builder.CreateNot(CB.getOperand(0)),
                                         m_intptrTy));
-        } else if (fn->getName().equals("seahorn.fail") ||
-                   fn->getName().equals("verifier.error")) {
+        } else if (fn->getName() == "seahorn.fail" ||
+                   fn->getName() == "verifier.error") {
           // TODO: extract line number info from inst
           if (!fname)
             fname = Builder.CreateGlobalString(F.getName());
@@ -275,9 +272,7 @@ public:
                Builder.CreateGlobalStringPtr("__builtin.c"),
                Builder.getInt32(0),
                Builder.CreateConstGEP2_32(
-                   cast<PointerType>(fname->getType()->getScalarType())
-                       ->getElementType(),
-                   fname, 0, 0)});
+                   cast<GlobalVariable>(fname)->getValueType(), fname, 0, 0)});
         }
 
         if (ninst) {

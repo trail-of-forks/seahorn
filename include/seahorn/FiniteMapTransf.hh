@@ -3,6 +3,7 @@
 #include "seahorn/Expr/Expr.hh"
 #include "seahorn/Expr/ExprVisitor.hh"
 #include "seahorn/Expr/Smt/EZ3.hh"
+#include "seahorn/Support/CompatFunctional.hh"
 
 using namespace expr;
 using namespace expr::op;

@@ -178,7 +178,9 @@ void SeaBuiltinsInfo::setCommonAttrs(Function &F) {
   B.addAttribute(Attribute::NoUnwind);
   B.addAttribute(Attribute::NoRecurse);
   B.addAttribute(Attribute::NoFree);
+#if LLVM_VERSION_MAJOR < 18
   B.addAttribute(Attribute::InaccessibleMemOnly);
+#endif
 
   AttributeList as = AttributeList::get(C, AttributeList::FunctionIndex, B);
   F.setAttributes(as);
@@ -231,7 +233,7 @@ Function *SeaBuiltinsInfo::mkAssertAssumeFn(Module &M, SeaBuiltinsOp op) {
 Function *SeaBuiltinsInfo::mkIsModifiedFn(Module &M) {
   auto &C = M.getContext();
   auto FC = M.getOrInsertFunction(SEA_IS_MODIFIED, Type::getInt1Ty(C),
-                                  Type::getInt8PtrTy(C));
+                                  Type::getInt8Ty(C)->getPointerTo());
   auto *FN = dyn_cast<Function>(FC.getCallee());
   if (FN) {
     FN->setOnlyReadsMemory();
@@ -248,7 +250,7 @@ Function *SeaBuiltinsInfo::mkIsModifiedFn(Module &M) {
 Function *SeaBuiltinsInfo::mkResetModifiedFn(Module &M) {
   auto &C = M.getContext();
   auto FC = M.getOrInsertFunction(SEA_RESET_MODIFIED, Type::getVoidTy(C),
-                                  Type::getInt8PtrTy(C));
+                                  Type::getInt8Ty(C)->getPointerTo());
   auto *FN = dyn_cast<Function>(FC.getCallee());
   if (FN) {
     FN->setDoesNotThrow();
@@ -264,7 +266,7 @@ Function *SeaBuiltinsInfo::mkResetModifiedFn(Module &M) {
 Function *SeaBuiltinsInfo::mkIsReadFn(Module &M) {
   auto &C = M.getContext();
   auto FC = M.getOrInsertFunction(SEA_IS_READ, Type::getInt1Ty(C),
-                                  Type::getInt8PtrTy(C));
+                                  Type::getInt8Ty(C)->getPointerTo());
   auto *FN = dyn_cast<Function>(FC.getCallee());
   if (FN) {
     FN->setOnlyReadsMemory();
@@ -281,7 +283,7 @@ Function *SeaBuiltinsInfo::mkIsReadFn(Module &M) {
 Function *SeaBuiltinsInfo::mkResetReadFn(Module &M) {
   auto &C = M.getContext();
   auto FC = M.getOrInsertFunction(SEA_RESET_READ, Type::getVoidTy(C),
-                                  Type::getInt8PtrTy(C));
+                                  Type::getInt8Ty(C)->getPointerTo());
   auto *FN = dyn_cast<Function>(FC.getCallee());
   if (FN) {
     FN->setDoesNotThrow();
@@ -297,10 +299,11 @@ Function *SeaBuiltinsInfo::mkResetReadFn(Module &M) {
 Function *SeaBuiltinsInfo::mkGetShadowMem(llvm::Module &M) {
   auto &C = M.getContext();
   auto *IntPtrTy = M.getDataLayout().getIntPtrType(C);
-  auto FC = M.getOrInsertFunction(SEA_GET_SHADOWMEM,
-                                  IntPtrTy,             // return type
-                                  Type::getInt8Ty(C),   // slot number 0..255
-                                  Type::getInt8PtrTy(C) // address int8_t*
+  auto FC = M.getOrInsertFunction(
+      SEA_GET_SHADOWMEM,
+      IntPtrTy,                          // return type
+      Type::getInt8Ty(C),                // slot number 0..255
+      Type::getInt8Ty(C)->getPointerTo() // address int8_t*
   );
   auto *FN = dyn_cast<Function>(FC.getCallee());
   if (FN) {
@@ -316,11 +319,12 @@ Function *SeaBuiltinsInfo::mkGetShadowMem(llvm::Module &M) {
 Function *SeaBuiltinsInfo::mkSetShadowMem(llvm::Module &M) {
   auto &C = M.getContext();
   auto *IntPtrTy = M.getDataLayout().getIntPtrType(C);
-  auto FC = M.getOrInsertFunction(SEA_SET_SHADOWMEM,
-                                  Type::getVoidTy(C),    // return type
-                                  Type::getInt8Ty(C),    // slot number 0..255
-                                  Type::getInt8PtrTy(C), // address int8_t*
-                                  IntPtrTy               // value to set
+  auto FC = M.getOrInsertFunction(
+      SEA_SET_SHADOWMEM,
+      Type::getVoidTy(C),                 // return type
+      Type::getInt8Ty(C),                 // slot number 0..255
+      Type::getInt8Ty(C)->getPointerTo(), // address int8_t*
+      IntPtrTy                            // value to set
   );
   auto *FN = dyn_cast<Function>(FC.getCallee());
   if (FN) {
@@ -335,7 +339,7 @@ Function *SeaBuiltinsInfo::mkSetShadowMem(llvm::Module &M) {
 Function *SeaBuiltinsInfo::mkIsAllocFn(Module &M) {
   auto &C = M.getContext();
   auto FC = M.getOrInsertFunction(SEA_IS_ALLOC, Type::getInt1Ty(C),
-                                  Type::getInt8PtrTy(C));
+                                  Type::getInt8Ty(C)->getPointerTo());
   auto *FN = dyn_cast<Function>(FC.getCallee());
   if (FN) {
     FN->setOnlyReadsMemory();
@@ -353,7 +357,7 @@ Function *SeaBuiltinsInfo::mkIsDereferenceable(Module &M) {
   auto &C = M.getContext();
   auto *IntPtrTy = M.getDataLayout().getIntPtrType(C);
   auto FC = M.getOrInsertFunction(SEA_IS_DEREFERENCEABLE, Type::getInt1Ty(C),
-                                  Type::getInt8PtrTy(C), IntPtrTy);
+                                  Type::getInt8Ty(C)->getPointerTo(), IntPtrTy);
   auto *FN = dyn_cast<Function>(FC.getCallee());
   if (FN) {
     FN->setOnlyAccessesInaccessibleMemory();
@@ -472,7 +476,7 @@ Function *SeaBuiltinsInfo::mkTrackingOffFn(Module &M) {
 Function *SeaBuiltinsInfo::mkFreeFn(Module &M) {
   auto &C = M.getContext();
   auto FC = M.getOrInsertFunction(SEA_FREE, Type::getVoidTy(C),
-                                  Type::getInt8PtrTy(C));
+                                  Type::getInt8Ty(C)->getPointerTo());
   auto *FN = dyn_cast<Function>(FC.getCallee());
   if (FN) {
     FN->setDoesNotThrow();
@@ -489,9 +493,9 @@ Function *SeaBuiltinsInfo::mkFreeFn(Module &M) {
 Function *SeaBuiltinsInfo::mkMkOwn(Module &M) {
   // This consumes a shared ptr and returns an owned ptr
   auto &C = M.getContext();
-  auto FC =
-      M.getOrInsertFunction(SEA_MK_OWN, Type::getInt8PtrTy(C) /* return  */,
-                            Type::getInt8PtrTy(C) /* param */);
+  auto FC = M.getOrInsertFunction(
+      SEA_MK_OWN, Type::getInt8Ty(C)->getPointerTo() /* return  */,
+      Type::getInt8Ty(C)->getPointerTo() /* param */);
   auto *FN = dyn_cast<Function>(FC.getCallee());
   if (FN) {
     FN->setDoesNotThrow();
@@ -506,9 +510,9 @@ Function *SeaBuiltinsInfo::mkMkOwn(Module &M) {
 Function *SeaBuiltinsInfo::mkMkShr(Module &M) {
   // This consumes a shared ptr and returns an owned ptr
   auto &C = M.getContext();
-  auto FC =
-      M.getOrInsertFunction(SEA_MK_SHR, Type::getInt8PtrTy(C) /* return  */,
-                            Type::getInt8PtrTy(C) /* param */);
+  auto FC = M.getOrInsertFunction(
+      SEA_MK_SHR, Type::getInt8Ty(C)->getPointerTo() /* return  */,
+      Type::getInt8Ty(C)->getPointerTo() /* param */);
   auto *FN = dyn_cast<Function>(FC.getCallee());
   if (FN) {
     FN->setDoesNotThrow();
@@ -523,9 +527,9 @@ Function *SeaBuiltinsInfo::mkMkShr(Module &M) {
 Function *SeaBuiltinsInfo::mkBorMkBor(Module &M) {
   // This consumes an owned/borowed/uniqued ptr and returns a bowrrowed ptr
   auto &C = M.getContext();
-  auto FC =
-      M.getOrInsertFunction(SEA_BOR_MKBOR, Type::getInt8PtrTy(C) /* return  */,
-                            Type::getInt8PtrTy(C) /* param */);
+  auto FC = M.getOrInsertFunction(
+      SEA_BOR_MKBOR, Type::getInt8Ty(C)->getPointerTo() /* return  */,
+      Type::getInt8Ty(C)->getPointerTo() /* param */);
   auto *FN = dyn_cast<Function>(FC.getCallee());
   if (FN) {
     FN->setDoesNotThrow();
@@ -542,9 +546,9 @@ Function *SeaBuiltinsInfo::mkBorMkBorPart(Module &M) {
   auto &C = M.getContext();
   auto *IntPtrTy = M.getDataLayout().getIntPtrType(C);
   auto FC = M.getOrInsertFunction(
-      SEA_BOR_MKBOR_PART, Type::getInt8PtrTy(C) /* return  */,
-      Type::getInt8PtrTy(C) /* param */, IntPtrTy /* start inclusive */,
-      IntPtrTy /* end exclusive */);
+      SEA_BOR_MKBOR_PART, Type::getInt8Ty(C)->getPointerTo() /* return  */,
+      Type::getInt8Ty(C)->getPointerTo() /* param */,
+      IntPtrTy /* start inclusive */, IntPtrTy /* end exclusive */);
   auto *FN = dyn_cast<Function>(FC.getCallee());
   if (FN) {
     FN->setDoesNotThrow();
@@ -563,9 +567,9 @@ Function *SeaBuiltinsInfo::mkBorMkSuc(Module &M) {
   // This consumes an KIND (owned/borowed/uniqued) ptr and returns a KIND ptr.
   // This ptr will not be used until ptr created by bor_mkbor dies.
   auto &C = M.getContext();
-  auto FC =
-      M.getOrInsertFunction(SEA_BOR_MKSUC, Type::getInt8PtrTy(C) /* return  */,
-                            Type::getInt8PtrTy(C) /* param */);
+  auto FC = M.getOrInsertFunction(
+      SEA_BOR_MKSUC, Type::getInt8Ty(C)->getPointerTo() /* return  */,
+      Type::getInt8Ty(C)->getPointerTo() /* param */);
   auto *FN = dyn_cast<Function>(FC.getCallee());
   if (FN) {
     FN->setDoesNotThrow();
@@ -581,9 +585,9 @@ Function *SeaBuiltinsInfo::mkBeginUnique(Module &M) {
   // This consumes a shared ptr and creates a unique ptr.
   // A unique ptr cannot escape to memory
   auto &C = M.getContext();
-  auto FC = M.getOrInsertFunction(SEA_BEGIN_UNIQUE,
-                                  Type::getInt8PtrTy(C) /* return  */,
-                                  Type::getInt8PtrTy(C) /* param */);
+  auto FC = M.getOrInsertFunction(
+      SEA_BEGIN_UNIQUE, Type::getInt8Ty(C)->getPointerTo() /* return  */,
+      Type::getInt8Ty(C)->getPointerTo() /* param */);
   auto *FN = dyn_cast<Function>(FC.getCallee());
   if (FN) {
     FN->setDoesNotThrow();
@@ -598,9 +602,9 @@ Function *SeaBuiltinsInfo::mkBeginUnique(Module &M) {
 Function *SeaBuiltinsInfo::mkEndUnique(Module &M) {
   // This consumes a unique ptr and returns a shared ptr
   auto &C = M.getContext();
-  auto FC =
-      M.getOrInsertFunction(SEA_END_UNIQUE, Type::getInt8PtrTy(C) /* return  */,
-                            Type::getInt8PtrTy(C) /* param */);
+  auto FC = M.getOrInsertFunction(
+      SEA_END_UNIQUE, Type::getInt8Ty(C)->getPointerTo() /* return  */,
+      Type::getInt8Ty(C)->getPointerTo() /* param */);
   auto *FN = dyn_cast<Function>(FC.getCallee());
   if (FN) {
     FN->setDoesNotThrow();
@@ -617,9 +621,9 @@ Function *SeaBuiltinsInfo::mkBorMem2Reg(Module &M) {
   // borrowed ptr.
   // To mark a subsequent load as a borrow load.
   auto &C = M.getContext();
-  auto FC =
-      M.getOrInsertFunction(SEA_BOR_MEM2REG, Type::getInt8PtrTy(C) /* return */,
-                            Type::getInt8PtrTy(C) /* param 0 -- input ptr */);
+  auto FC = M.getOrInsertFunction(
+      SEA_BOR_MEM2REG, Type::getInt8Ty(C)->getPointerTo() /* return */,
+      Type::getInt8Ty(C)->getPointerTo() /* param 0 -- input ptr */);
   auto *FN = dyn_cast<Function>(FC.getCallee());
   if (FN) {
     FN->setDoesNotThrow();
@@ -635,9 +639,9 @@ Function *SeaBuiltinsInfo::mkMovReg2Mem(Module &M) {
   // memory.
   auto &C = M.getContext();
   auto FC = M.getOrInsertFunction(
-      SEA_MOV_REG2MEM, Type::getInt8PtrTy(C) /* return */,
-      Type::getInt8PtrTy(C) /* param 0 -- src ptr */,
-      Type::getInt8PtrTy(C) /* param 0 -- dst ptrttoptr */);
+      SEA_MOV_REG2MEM, Type::getInt8Ty(C)->getPointerTo() /* return */,
+      Type::getInt8Ty(C)->getPointerTo() /* param 0 -- src ptr */,
+      Type::getInt8Ty(C)->getPointerTo() /* param 0 -- dst ptrttoptr */);
   auto *FN = dyn_cast<Function>(FC.getCallee());
   if (FN) {
     FN->setDoesNotThrow();
@@ -652,8 +656,9 @@ Function *SeaBuiltinsInfo::mkMovReg2Mem(Module &M) {
 Function *SeaBuiltinsInfo::mkDie(Module &M) {
   // This consumes a ptr and semantically marks it as dead.
   auto &C = M.getContext();
-  auto FC = M.getOrInsertFunction(SEA_DIE, Type::getVoidTy(C) /* return  */,
-                                  Type::getInt8PtrTy(C) /* param */);
+  auto FC =
+      M.getOrInsertFunction(SEA_DIE, Type::getVoidTy(C) /* return  */,
+                            Type::getInt8Ty(C)->getPointerTo() /* param */);
   auto *FN = dyn_cast<Function>(FC.getCallee());
   if (FN) {
     FN->setDoesNotThrow();
@@ -668,8 +673,9 @@ Function *SeaBuiltinsInfo::mkDie(Module &M) {
 Function *SeaBuiltinsInfo::mkMove(Module &M) {
   // This consumes an owned/borowed/uniqued ptr and returns a bowrrowed ptr
   auto &C = M.getContext();
-  auto FC = M.getOrInsertFunction(SEA_MOVE, Type::getInt8PtrTy(C) /* return  */,
-                                  Type::getInt8PtrTy(C) /* param */);
+  auto FC = M.getOrInsertFunction(
+      SEA_MOVE, Type::getInt8Ty(C)->getPointerTo() /* return  */,
+      Type::getInt8Ty(C)->getPointerTo() /* param */);
   auto *FN = dyn_cast<Function>(FC.getCallee());
   if (FN) {
     FN->setDoesNotThrow();
@@ -683,10 +689,11 @@ Function *SeaBuiltinsInfo::mkMove(Module &M) {
 }
 Function *SeaBuiltinsInfo::mkGetFatPtrSlot(llvm::Module &M) {
   auto &C = M.getContext();
-  auto FC = M.getOrInsertFunction(SEA_GET_FATPTR_SLOT,
-                                  Type::getInt64Ty(C),   // return type
-                                  Type::getInt8PtrTy(C), // address int8_t* //
-                                  Type::getInt8Ty(C)     // slot number 0..255
+  auto FC = M.getOrInsertFunction(
+      SEA_GET_FATPTR_SLOT,
+      Type::getInt64Ty(C),                // return type
+      Type::getInt8Ty(C)->getPointerTo(), // address int8_t* //
+      Type::getInt8Ty(C)                  // slot number 0..255
 
   );
   auto *FN = dyn_cast<Function>(FC.getCallee());
@@ -702,13 +709,13 @@ Function *SeaBuiltinsInfo::mkGetFatPtrSlot(llvm::Module &M) {
 
 Function *SeaBuiltinsInfo::mkSetFatPtrSlot(llvm::Module &M) {
   auto &C = M.getContext();
-  auto FC =
-      M.getOrInsertFunction(SEA_SET_FATPTR_SLOT,
-                            Type::getInt8PtrTy(C), // return type is int8_t
-                            Type::getInt8PtrTy(C), // address int8_t*
-                            Type::getInt8Ty(C),    // slot number 0..255
-                            Type::getInt64Ty(C)    // value to set
-      );
+  auto FC = M.getOrInsertFunction(
+      SEA_SET_FATPTR_SLOT,
+      Type::getInt8Ty(C)->getPointerTo(), // return type is int8_t
+      Type::getInt8Ty(C)->getPointerTo(), // address int8_t*
+      Type::getInt8Ty(C),                 // slot number 0..255
+      Type::getInt64Ty(C)                 // value to set
+  );
   auto *FN = dyn_cast<Function>(FC.getCallee());
   if (FN) {
     FN->setDoesNotAccessMemory();

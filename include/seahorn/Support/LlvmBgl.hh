@@ -3,6 +3,7 @@
 /** BGL interface to LLVM CFG */
 
 #include "llvm/IR/CFG.h"
+#include "seahorn/Support/CompatFunctional.hh"
 
 #include <boost/graph/graph_traits.hpp>
 #include <boost/graph/properties.hpp>

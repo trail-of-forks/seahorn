@@ -63,7 +63,7 @@ public:
       return;
     if (const auto *prevCI = dyn_cast<CallInst>(prevI)) {
       const Function *prevF = prevCI->getCalledFunction();
-      if (!(prevF && prevF->getName().equals("shadow.mem.load"))) {
+      if (!(prevF && prevF->getName() == "shadow.mem.load")) {
         LOG("cex", ERR << "Skipping harness for memhavoc"
                        << " because shadow.mem.load cannot be found\n");
         return;
@@ -122,7 +122,7 @@ public:
     if (!CF->hasName())
       return;
 
-    if (CF->getName().equals("memhavoc")) {
+    if (CF->getName() == "memhavoc") {
       visitMemhavoc(I);
       return;
     }
@@ -132,7 +132,7 @@ public:
     // We want to ignore seahorn functions, but not nondet
     // functions created by strip-extern or dummyMainFunction
     if (CF->getName().find_first_of('.') != StringRef::npos &&
-        !CF->getName().startswith("verifier.nondet"))
+        !CF->getName().starts_with("verifier.nondet"))
       return;
     if (!CF->isExternalLinkage(CF->getLinkage()))
       return;
@@ -142,7 +142,7 @@ public:
     }
 
     // KleeInternalize
-    if (CF->getName().equals("calloc"))
+    if (CF->getName() == "calloc")
       return;
 
     // -- known library function
@@ -179,8 +179,8 @@ void CexExeGenerator<Trace>::buildNonDetFunction(const Function *func,
           .getCallee());
 
   Type *RT = func->getReturnType();
-  Type *pRT =
-      RT->isIntegerTy() ? RT->getPointerTo() : Type::getInt8PtrTy(m_context);
+  Type *pRT = RT->isIntegerTy() ? RT->getPointerTo()
+                                : Type::getInt8Ty(m_context)->getPointerTo();
   ArrayType *AT = ArrayType::get(RT, values.size());
 
   // Convert Expr to LLVM constants
@@ -220,27 +220,28 @@ void CexExeGenerator<Trace>::buildNonDetFunction(const Function *func,
     name = Twine("__seahorn_get_value_").concat(RSO.str()).str();
   } else if (RT->isPointerTy() ||
              RT->getTypeID() == llvm::ArrayType::ArrayTyID) {
-    Type *elmTy = (RT->isPointerTy()) ? RT->getPointerElementType()
-                                      : RT->getArrayElementType();
+    uint32_t bits = 0;
+    if (RT->isPointerTy()) {
+      unsigned AS = cast<PointerType>(RT)->getAddressSpace();
+      bits = m_dl.getPointerSizeInBits(AS);
+    } else if (RT->getTypeID() == llvm::ArrayType::ArrayTyID) {
+      bits = m_dl.getTypeStoreSizeInBits(RT->getArrayElementType());
+    }
 
     name = "__seahorn_get_value_ptr";
     ArgTypes.push_back(Type::getInt32Ty(m_context));
 
     // If we can tell how big the return type is, tell the
     // callback function.  Otherwise pass zero.
-    if (elmTy->isSized())
-      Args.push_back(ConstantInt::get(Type::getInt32Ty(m_context),
-                                      m_dl.getTypeStoreSizeInBits(elmTy)));
-    else
-      Args.push_back(ConstantInt::get(Type::getInt32Ty(m_context), 0));
+    Args.push_back(ConstantInt::get(Type::getInt32Ty(m_context), bits));
   } else {
     WARN << "Unknown type: " << *RT << "\n";
     assert(false && "Unknown return type");
   }
   FunctionCallee GetValue = m_harness->getOrInsertFunction(
-      name, FunctionType::get(RT, makeArrayRef(ArgTypes), false));
+      name, FunctionType::get(RT, ArrayRef(ArgTypes), false));
   assert(GetValue);
-  Value *RetValue = Builder.CreateCall(GetValue, makeArrayRef(Args));
+  Value *RetValue = Builder.CreateCall(GetValue, ArrayRef(Args));
   Builder.CreateRet(RetValue);
 }
 
@@ -256,7 +257,7 @@ void CexExeGenerator<Trace>::buildMemhavoc(const Function *func,
     LOG("cex", WARN << "memhavoc has non-void return type. Skipping...\n";);
     return;
   }
-  Type *i8PtrTy = Type::getInt8PtrTy(m_context);
+  Type *i8PtrTy = Type::getInt8Ty(m_context)->getPointerTo();
   // Convert Expr to LLVM constants
   SmallVector<Constant *, 20> LLVMarray;
   // one nested array for segments
@@ -298,9 +299,9 @@ void CexExeGenerator<Trace>::buildMemhavoc(const Function *func,
       ConstantInt::get(CountType, values.size()),
       ConstantInt::get(Type::getInt32Ty(m_context), 0)};
   FunctionCallee GetValue = m_harness->getOrInsertFunction(
-      name, FunctionType::get(i8PtrTy, makeArrayRef(ArgTypes), false));
+      name, FunctionType::get(i8PtrTy, ArrayRef(ArgTypes), false));
   assert(GetValue);
-  Value *RetValue = Builder.CreateCall(GetValue, makeArrayRef(Args));
+  Value *RetValue = Builder.CreateCall(GetValue, ArrayRef(Args));
 
   // void memcpy(i8* dst, i8* src, size_t block_len)
   FunctionCallee memCpy = m_harness->getOrInsertFunction(
@@ -319,7 +320,7 @@ template <class Trace> void CexExeGenerator<Trace>::buildCexModule() {
   for (auto CFV : m_func_val_map) {
     auto CF = CFV.first;
     auto &values = CFV.second;
-    if (CF->getName().equals("memhavoc")) {
+    if (CF->getName() == "memhavoc") {
       buildMemhavoc(CF, values);
     } else {
       buildNonDetFunction(CF, values);
@@ -340,7 +341,7 @@ void CexExeGenerator<Trace>::saveCexModuleToFile(llvm::StringRef CexFile) {
   llvm::ToolOutputFile out(CexFile, error_code, sys::fs::OF_None);
   assert(!error_code);
   verifyModule(*m_harness, &errs());
-  if (CexFile.endswith(".ll"))
+  if (CexFile.ends_with(".ll"))
     out.os() << *m_harness;
   else
     WriteBitcodeToFile(*m_harness, out.os());
@@ -409,7 +410,8 @@ Constant *CexExeGenerator<Trace>::exprToMemSegment(Expr segment, Expr startAddr,
     blockWidth = sizeMpz.get_ui();
   } else {
     LOG("cex", ERR << "memhavoc: cannot get concrete size (" << *size << ")\n");
-    ArrayType *placeholderT = ArrayType::get(Type::getInt8PtrTy(m_context), 0);
+    ArrayType *placeholderT =
+        ArrayType::get(Type::getInt8Ty(m_context)->getPointerTo(), 0);
     return ConstantArray::get(placeholderT, LLVMValueSegment);
   }
 
@@ -421,7 +423,8 @@ Constant *CexExeGenerator<Trace>::exprToMemSegment(Expr segment, Expr startAddr,
   } else {
     LOG("cex", ERR << "memhavoc: cannot get concrete starting address: "
                    << *startAddr << "\n");
-    ArrayType *placeholderT = ArrayType::get(Type::getInt8PtrTy(m_context), 0);
+    ArrayType *placeholderT =
+        ArrayType::get(Type::getInt8Ty(m_context)->getPointerTo(), 0);
     return ConstantArray::get(placeholderT, LLVMValueSegment);
   }
 
@@ -429,7 +432,8 @@ Constant *CexExeGenerator<Trace>::exprToMemSegment(Expr segment, Expr startAddr,
   if (!m_map.isValid()) {
     LOG("cex",
         ERR << "memhavoc: cannot extract content from: " << *segment << "\n");
-    ArrayType *placeholderT = ArrayType::get(Type::getInt8PtrTy(m_context), 0);
+    ArrayType *placeholderT =
+        ArrayType::get(Type::getInt8Ty(m_context)->getPointerTo(), 0);
     return ConstantArray::get(placeholderT, LLVMValueSegment);
   }
   size_t elmWidth = m_map.getContentWidth();

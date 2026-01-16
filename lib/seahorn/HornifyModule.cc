@@ -1,10 +1,10 @@
 #include "seahorn/HornifyModule.hh"
+#include "seahorn/Support/CompatFunctional.hh"
 
 #include "seahorn/Transforms/Utils/NameValues.hh"
 
 #include "seahorn/Expr/ExprLlvm.hh"
 #include "seahorn/Support/BoostLlvmGraphTraits.hh"
-#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SCCIterator.h"
 #include "llvm/Analysis/CFG.h"
 #include "llvm/Analysis/CallGraph.h"
@@ -15,6 +15,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Regex.h"
 #include "llvm/Support/raw_ostream.h"
+#include <optional>
 
 //#include "boost/range.hpp"
 #include "boost/scoped_ptr.hpp"
@@ -136,14 +137,14 @@ char HornifyModule::ID = 0;
 
 struct FunctionNameMatcher
     : public std::unary_function<const Function &, bool> {
-  llvm::Optional<llvm::Regex> m_re;
+  std::optional<Regex> m_re;
   FunctionNameMatcher(std::string s) {
     if (s != "") {
       m_re = llvm::Regex(s);
       std::string Error;
       if (!m_re->isValid(Error)) {
         WARN << "syntax error in regex '" << s << "' " << Error;
-        m_re = llvm::None;
+        m_re = std::nullopt;
       }
     }
   }

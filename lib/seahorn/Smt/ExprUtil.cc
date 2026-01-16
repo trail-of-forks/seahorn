@@ -3,6 +3,7 @@
 #include "seahorn/Expr/ExprNumericUtils.hh"
 #include "seahorn/Expr/ExprSimplifier.hh"
 #include "seahorn/Expr/ExprVisitor.hh"
+#include "seahorn/Support/CompatFunctional.hh"
 /// yet to be refactored
 
 namespace expr {

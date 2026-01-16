@@ -36,7 +36,7 @@ void HornifyFunction::extractFunctionInfo(const BasicBlock &BB) {
 
   const Function &F = *BB.getParent();
   // main does not need a summary
-  if (F.getName().equals("main"))
+  if (F.getName() == "main")
     return;
 
   const ReturnInst *ret = dyn_cast<const ReturnInst>(BB.getTerminator());
@@ -61,8 +61,8 @@ void HornifyFunction::extractFunctionInfo(const BasicBlock &BB) {
   SymStore s(m_efac);
   auto addCellSymb = [&](CellExprMap &m, const CallInst &ci, Expr e) {
     auto opt_c = shadowMem->getShadowMemCell(ci);
-    assert(opt_c.hasValue());
-    m.insert({impp->cellToPair(opt_c.getValue()), s.read(e)});
+    assert(opt_c.has_value());
+    m.insert({impp->cellToPair(opt_c.value()), s.read(e)});
   };
 
   // Appends arguments to sorts for memory regions in fi.
@@ -71,8 +71,8 @@ void HornifyFunction::extractFunctionInfo(const BasicBlock &BB) {
     for (const Instruction &inst : BB) {
       if (auto *ci = dyn_cast<CallInst>(&inst)) {
         const Function *cf = ci->getCalledFunction();
-        if (cf && (cf->getName().equals("shadow.mem.in") ||
-                   cf->getName().equals("shadow.mem.out"))) {
+        if (cf && (cf->getName() == "shadow.mem.in" ||
+                   cf->getName() == "shadow.mem.out")) {
           auto &v = *ci->getOperand(1);
           Expr r = m_sem.symb(v);
           if (!r)
@@ -82,7 +82,7 @@ void HornifyFunction::extractFunctionInfo(const BasicBlock &BB) {
 
           // collect expression information for later
           if (InterMemArrayConstraints) {
-            if (cf->getName().equals("shadow.mem.in"))
+            if (cf->getName() == "shadow.mem.in")
               addCellSymb(inMemMap, *ci, r);
             else
               addCellSymb(outMemMap, *ci, r);
@@ -446,9 +446,9 @@ void SmallHornifyFunction::runOnFunction(Function &F) {
     m_db.addRule(allVars, boolop::limp(pre, post));
   }
 
-  if (F.getName().equals("main") && ls.live(exit).size() == 1)
+  if (F.getName() == "main" && ls.live(exit).size() == 1)
     m_db.addQuery(bind::fapp(m_parent.bbPredicate(*exit), mk<TRUE>(m_efac)));
-  else if (F.getName().equals("main") && ls.live(exit).size() == 0)
+  else if (F.getName() == "main" && ls.live(exit).size() == 0)
     m_db.addQuery(bind::fapp(m_parent.bbPredicate(*exit)));
   else if (m_interproc) {
     // the summary rule
@@ -802,9 +802,9 @@ void LargeHornifyFunction::runOnFunction(Function &F) {
     }
   }
 
-  if (F.getName().equals("main") && ls.live(exit).size() == 1)
+  if (F.getName() == "main" && ls.live(exit).size() == 1)
     m_db.addQuery(bind::fapp(m_parent.bbPredicate(*exit), mk<TRUE>(m_efac)));
-  else if (F.getName().equals("main") && ls.live(exit).size() == 0)
+  else if (F.getName() == "main" && ls.live(exit).size() == 0)
     m_db.addQuery(bind::fapp(m_parent.bbPredicate(*exit)));
   else if (m_interproc) {
     // the summary rule

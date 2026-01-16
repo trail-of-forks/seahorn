@@ -47,7 +47,7 @@ void DfCoiAnalysis::analyze(User &user) {
       }
     } else if (auto *CI = dyn_cast<CallInst>(&u)) {
       if (CI->getCalledFunction()) {
-        if (CI->getCalledFunction()->getName().equals("shadow.mem.store")) {
+        if (CI->getCalledFunction()->getName() == "shadow.mem.store") {
           // insert store instruction that follows
           BasicBlock::iterator it(CI);
           ++it;
@@ -60,8 +60,7 @@ void DfCoiAnalysis::analyze(User &user) {
           BasicBlock::iterator it(CI);
           --it;
           if (auto *CI = dyn_cast<CallInst>(&*it)) {
-            assert(
-                CI->getCalledFunction()->getName().equals("shadow.mem.load"));
+            assert(CI->getCalledFunction()->getName() == "shadow.mem.load");
             workList.push_back(&*it);
           } else if (boost::hana::contains(
                          shadowStoreSucc, CI->getCalledFunction()->getName())) {
@@ -70,8 +69,7 @@ void DfCoiAnalysis::analyze(User &user) {
             BasicBlock::iterator it(CI);
             --it;
             if (auto *CI = dyn_cast<CallInst>(&*it)) {
-              assert(CI->getCalledFunction()->getName().equals(
-                  "shadow.mem.store"));
+              assert(CI->getCalledFunction()->getName() == "shadow.mem.store");
               workList.push_back(&*it);
             }
           }
@@ -97,7 +95,7 @@ CallInst *DfCoiAnalysis::analyzeLoad(LoadInst &LI) {
 
   --it;
   if (auto *CI = dyn_cast<CallInst>(&*it)) {
-    assert(CI->getCalledFunction()->getName().equals("shadow.mem.load"));
+    assert(CI->getCalledFunction()->getName() == "shadow.mem.load");
     return CI;
   }
   return nullptr;
@@ -114,7 +112,7 @@ CallInst *DfCoiAnalysis::analyzeMemTransfer(MemTransferInst &MI) {
     return nullptr;
   --it;
   if (auto *CI = dyn_cast<CallInst>(&*it)) {
-    assert(CI->getCalledFunction()->getName().equals("shadow.mem.trsfr.load"));
+    assert(CI->getCalledFunction()->getName() == "shadow.mem.trsfr.load");
     return CI;
   }
   return nullptr;
@@ -129,8 +127,8 @@ CallInst *DfCoiAnalysis::analyzeAllocaInst(AllocaInst &AI) {
 
   --it;
   if (auto *CI = dyn_cast<CallInst>(&*it)) {
-    assert(CI->getCalledFunction()->getName().equals("shadow.mem.load") ||
-           CI->getCalledFunction()->getName().equals("shadow.mem.store"));
+    assert(CI->getCalledFunction()->getName() == "shadow.mem.load" ||
+           CI->getCalledFunction()->getName() == "shadow.mem.store");
     return CI;
   }
   return nullptr;

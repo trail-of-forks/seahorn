@@ -1,3 +1,5 @@
+#include "llvm/ADT/SmallString.h"
+
 #include "BvOpSem2TrackingRawMemMgr.hh"
 
 namespace seahorn {
@@ -186,8 +188,8 @@ TrackingRawMemManager::MemValTy TrackingRawMemManager::storeValueToMem(
     WARN << "Storing struct type " << ty << " is not supported\n";
     return res;
   default:
-    SmallString<256> msg;
-    raw_svector_ostream out(msg);
+    llvm::SmallString<256> msg;
+    llvm::raw_svector_ostream out(msg);
     out << "Loading from type: " << ty << " is not supported\n";
     assert(false);
   }

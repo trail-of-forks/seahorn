@@ -3,6 +3,7 @@
 /// Horn Clause Database
 
 #include "llvm/Support/raw_ostream.h"
+#include "seahorn/Support/CompatFunctional.hh"
 
 #include <boost/functional/hash.hpp>
 #include <boost/lexical_cast.hpp>

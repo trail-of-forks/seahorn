@@ -29,6 +29,7 @@
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/IPO.h"
+#include "llvm/Transforms/Scalar.h"
 
 #include "llvm/IR/Verifier.h"
 
@@ -447,7 +448,9 @@ int main(int argc, char **argv) {
     assert(LowerSwitch && "Lower switch must be enabled");
     pm_wrapper.add(llvm::createLowerSwitchPass());
     pm_wrapper.add(llvm::createLoopSimplifyPass());
+#if LLVM_VERSION_MAJOR < 18
     pm_wrapper.add(llvm::createLoopSimplifyCFGPass());
+#endif
     pm_wrapper.add(llvm_seahorn::createLoopRotatePass(/*1023*/));
     pm_wrapper.add(llvm::createLCSSAPass());
     if (PeelLoops > 0)
@@ -526,7 +529,9 @@ int main(int argc, char **argv) {
     auto PreserveMain = [=](const llvm::GlobalValue &GV) {
       return GV.getName() == "main" || GV.getName() == "bcmp";
     };
+#if LLVM_VERSION_MAJOR < 18
     pm_wrapper.add(llvm::createInternalizePass(PreserveMain));
+#endif
 
     if (LowerInvoke) {
       // -- lower invoke's
@@ -538,7 +543,9 @@ int main(int argc, char **argv) {
     // -- resolve indirect calls
     if (DevirtualizeFuncs) {
       pm_wrapper.add(seadsa::createRemovePtrToIntPass());
+#if LLVM_VERSION_MAJOR < 18
       pm_wrapper.add(llvm::createWholeProgramDevirtPass(nullptr, nullptr));
+#endif
       pm_wrapper.add(seahorn::createDevirtualizeFunctionsPass());
     }
 
@@ -547,10 +554,14 @@ int main(int argc, char **argv) {
       pm_wrapper.add(seahorn::createExternalizeAddressTakenFunctionsPass());
 
     // kill internal unused code
+#if LLVM_VERSION_MAJOR < 18
     pm_wrapper.add(llvm::createGlobalDCEPass()); // kill unused internal global
+#endif
 
     // -- global optimizations
+#if LLVM_VERSION_MAJOR < 18
     pm_wrapper.add(llvm::createGlobalOptimizerPass());
+#endif
 
     // -- explicitly initialize globals in the beginning of main()
     if (LowerGlobalInitializers)
@@ -659,8 +670,10 @@ int main(int argc, char **argv) {
     // run inliner pass
     if (InlineAll || InlineAllocFn || InlineConstructFn) {
       pm_wrapper.add(llvm::createAlwaysInlinerLegacyPass());
+#if LLVM_VERSION_MAJOR < 18
       pm_wrapper.add(
           llvm::createGlobalDCEPass()); // kill unused internal global
+#endif
       pm_wrapper.add(seahorn::createPromoteMallocPass());
       pm_wrapper.add(seahorn::createRemoveUnreachableBlocksPass());
 
@@ -675,8 +688,12 @@ int main(int argc, char **argv) {
     pm_wrapper.add(llvm::createDeadCodeEliminationPass());
     // Superseded by DCE in LLVM12
     // pm_wrapper.add(llvm::createDeadInstEliminationPass());
+#if LLVM_VERSION_MAJOR < 18
     pm_wrapper.add(llvm::createGlobalDCEPass()); // kill unused internal global
+#endif
+#if LLVM_VERSION_MAJOR < 18
     pm_wrapper.add(llvm::createUnifyFunctionExitNodesPass());
+#endif
 
     // -- moves loop initialization up
     // AG: After inline because cheap and loop initialization is moved higher up
@@ -689,7 +706,9 @@ int main(int argc, char **argv) {
 
     pm_wrapper.add(seahorn::createRemoveUnreachableBlocksPass());
     pm_wrapper.add(seahorn::createPromoteMallocPass());
+#if LLVM_VERSION_MAJOR < 18
     pm_wrapper.add(llvm::createGlobalDCEPass()); // kill unused internal global
+#endif
 
     // -- Enable function slicing
     // AG: NOT USED. Not part of std pipeline
@@ -703,12 +722,13 @@ int main(int argc, char **argv) {
   if (NameValues)
     pm_wrapper.add(seahorn::createNameValuesPass());
 
+#if LLVM_VERSION_MAJOR < 18
   if (InstNamer)
     pm_wrapper.add(llvm::createInstructionNamerPass());
 
   if (StripDebug)
     pm_wrapper.add(llvm::createStripDeadDebugInfoPass());
-
+#endif
   // --- verify if an undefined value can be read
   pm_wrapper.add(seahorn::createCanReadUndefPass());
   // --- verify if bitcode is well-formed

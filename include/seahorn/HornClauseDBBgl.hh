@@ -5,6 +5,7 @@
 
 #include "seahorn/HornClauseDB.hh"
 #include "seahorn/Expr/Expr.hh"
+#include "seahorn/Support/CompatFunctional.hh"
 
 #include <boost/iterator/transform_iterator.hpp>
 #include <boost/graph/graph_traits.hpp>

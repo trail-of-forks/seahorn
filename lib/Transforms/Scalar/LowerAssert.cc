@@ -46,17 +46,17 @@ bool isAssertionHandler(Function *F) {
   // --- first, some known assertion handlers
 
   // on Linux
-  if (F->getName().equals("__assert_fail"))
+  if (F->getName() == "__assert_fail")
     return true;
 
   // on Mac OS X
-  if (F->getName().equals("__assert_rtn"))
+  if (F->getName() == "__assert_rtn")
     return true;
 
   // --- otherwise, we consider the function an assertion handler if
   //     the function does not return.
 
-  if (F->getName().startswith("__assert") && F->doesNotReturn())
+  if (F->getName().starts_with("__assert") && F->doesNotReturn())
     return true;
 
   return false;

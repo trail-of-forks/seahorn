@@ -4,6 +4,7 @@
 #include "seahorn/Expr/ExprApi.hh"
 #include "seahorn/Expr/ExprCore.hh"
 #include "seahorn/Expr/ExprOpArray.hh"
+#include "seahorn/Support/CompatFunctional.hh"
 // #include "seahorn/Expr/ExprOpBinder.hh"
 #include "seahorn/Expr/ExprErrBinder.hh"
 #include "seahorn/Expr/ExprOpBool.hh"

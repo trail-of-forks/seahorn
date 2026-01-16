@@ -343,7 +343,7 @@ public:
   // Opcode Implementations
   void visitReturnInst(ReturnInst &I) {
     // -- skip return argument of main
-    if (I.getParent()->getParent()->getName().equals("main"))
+    if (I.getParent()->getParent()->getName() == "main")
       return;
 
     // read the operand of return instruction so that the read is observable
@@ -472,17 +472,17 @@ public:
   void visitFCmpInst(FCmpInst &I) { llvm_unreachable(nullptr); }
 
   void visitAllocaInst(AllocaInst &I) {
-    Type *ty = I.getType()->getElementType();
+    Type *ty = I.getAllocatedType();
     unsigned typeSz = (size_t)m_sem.getTD().getTypeAllocSize(ty);
 
     Expr addr;
     if (const Constant *cv = dyn_cast<const Constant>(I.getOperand(0))) {
       ConstantExprEvaluator ce(m_sem.getDataLayout());
       auto ogv = ce.evaluate(cv);
-      if (!ogv.hasValue()) {
+      if (!ogv.has_value()) {
         llvm_unreachable(nullptr);
       }
-      unsigned nElts = ogv.getValue().IntVal.getZExtValue();
+      unsigned nElts = ogv.value().IntVal.getZExtValue();
       unsigned memSz = typeSz * nElts;
       LOG(
           "opsem", auto dloc = I.getDebugLoc(); if (dloc) {
@@ -539,12 +539,12 @@ public:
     } else {
       LOG("opsem.load", INFO << I;);
     }
-    setValue(I, executeLoadInst(*I.getPointerOperand(), I.getAlignment(),
+    setValue(I, executeLoadInst(*I.getPointerOperand(), I.getAlign().value(),
                                 I.getType(), m_ctx));
   }
   void visitStoreInst(StoreInst &I) {
     executeStoreInst(*I.getValueOperand(), *I.getPointerOperand(),
-                     I.getAlignment(), m_ctx);
+                     I.getAlign().value(), m_ctx);
   }
 
   void visitGetElementPtrInst(GetElementPtrInst &I) {
@@ -616,18 +616,18 @@ public:
     // -- should be handled by visitIntrinsicInst
     assert(!f->isIntrinsic());
 
-    if (f->getName().startswith("verifier.assume")) {
+    if (f->getName().starts_with("verifier.assume")) {
       visitVerifierAssumeCall(CB);
       return;
     }
 
-    if (f->getName().equals("calloc")) {
+    if (f->getName() == "calloc") {
       visitCallocCall(CB);
       return;
     }
 
     if (f->getFunctionType()->getReturnType()->isVoidTy()) {
-      if (f->getName().startswith("_ZN4core3ptr56drop_in_place")) {
+      if (f->getName().starts_with("_ZN4core3ptr56drop_in_place")) {
         // core::ptr::drop_in_place is recursive
         WARN << "Skipping a non-inlineable call to: " << f->getName();
         return;
@@ -646,7 +646,7 @@ public:
       return;
     }
 
-    if (f->getName().startswith("shadow.mem")) {
+    if (f->getName().starts_with("shadow.mem")) {
       WARN << "missing metadata on shadow.mem functions. "
               "Probably using old ShadowMem pass. "
               "Some features might not work as expected";
@@ -715,7 +715,7 @@ public:
       // The ease of adding a new instrinsic outweighs the cost of looping --
       // since the number of entries is small and not likely to grow 2x
       hana::for_each(hana::keys(funDeclStartsWithVisitorMap), [&](auto key) {
-        if (candidate.startswith(key.c_str()) && !found) {
+        if (candidate.starts_with(key.c_str()) && !found) {
           auto fnPtr = funDeclStartsWithVisitorMap[key];
           (this->*fnPtr)(CB);
           found = true;
@@ -726,11 +726,11 @@ public:
     };
 
     if (f->isDeclaration()) {
-      if (f->arg_empty() && (f->getName().startswith("nd") ||
-                             f->getName().startswith("nondet.") ||
-                             f->getName().endswith("nondet") ||
-                             f->getName().startswith("verifier.nondet") ||
-                             f->getName().startswith("__VERIFIER_nondet")))
+      if (f->arg_empty() && (f->getName().starts_with("nd") ||
+                             f->getName().starts_with("nondet.") ||
+                             f->getName().ends_with("nondet") ||
+                             f->getName().starts_with("verifier.nondet") ||
+                             f->getName().starts_with("__VERIFIER_nondet")))
         visitNondetCall(CB);
       else if (visitFunDecl(f->getName())) {
         return;
@@ -756,7 +756,7 @@ public:
 
     auto *f = getCalledFunction(CB);
     Expr res;
-    if (f->getName().startswith("smt.extract.")) {
+    if (f->getName().starts_with("smt.extract.")) {
       auto *arg0 = dyn_cast<ConstantInt>(CB.getOperand(0));
       auto *arg1 = dyn_cast<ConstantInt>(CB.getOperand(1));
       auto *val = CB.getOperand(2);
@@ -766,7 +766,7 @@ public:
             m_ctx.alu().Extract({symVal, val->getType()->getScalarSizeInBits()},
                                 arg0->getZExtValue(), arg1->getZExtValue());
       }
-    } else if (f->getName().startswith("smt.concat.")) {
+    } else if (f->getName().starts_with("smt.concat.")) {
       LOG("opsem", WARN << "Not implemented yet";);
       assert(false);
     } else {
@@ -799,7 +799,7 @@ public:
     InlineAsm *IA = cast<InlineAsm>(CB.getCalledOperand());
     const std::string &AsmStr = IA->getAsmString();
     llvm::SmallVector<llvm::StringRef, 4> AsmPieces;
-    llvm::SplitString(AsmStr, AsmPieces, ";\n");
+    StringRef(AsmStr).split(AsmPieces, ";\n");
     switch (AsmPieces.size()) {
     default:
       LOG("opsem", ERR << "Cannot handle inline assembly: " << CB);
@@ -842,8 +842,7 @@ public:
                 AsmStr.compare(0, 16, "rolw $$8, ${0:w}") == 0)) {
         // Check Flag resgisters
         AsmPieces.clear();
-        llvm::SplitString(StringRef(IA->getConstraintString()).substr(5),
-                          AsmPieces, ",");
+        StringRef(IA->getConstraintString()).substr(5).split(AsmPieces, ",");
         // Try to replace a call instruction with a call to a bswap intrinsic
         isAsmHandled = clobbersFlagRegisters(AsmPieces) &&
                        expandCallInst(cast<CallInst>(CB), [](CallInst &CI) {
@@ -1183,7 +1182,7 @@ public:
     auto &f = *getCalledFunction(CB);
 
     Expr op = lookup(*CB.getOperand(0));
-    if (f.getName().equals("verifier.assert.not"))
+    if (f.getName() == "verifier.assert.not")
       op = boolop::lneg(op);
     doAssert(m_ctx.alu().getTrue(), op, CB);
   }
@@ -1192,25 +1191,25 @@ public:
     auto *f = getCalledFunction(CB);
     assert(f);
 
-    if (f->getName().equals("__sea_set_extptr_slot0_hm")) {
+    if (f->getName() == "__sea_set_extptr_slot0_hm") {
       Expr ptr = lookup(*CB.getOperand(0));
       Expr data = lookup(*CB.getOperand(1));
       Expr res = m_ctx.mem().setFatData(ptr, 0 /*slot */, data);
       setValue(CB, res);
-    } else if (f->getName().equals("__sea_set_extptr_slot1_hm")) {
+    } else if (f->getName() == "__sea_set_extptr_slot1_hm") {
       Expr ptr = lookup(*CB.getOperand(0));
       Expr data = lookup(*CB.getOperand(1));
       Expr res = m_ctx.mem().setFatData(ptr, 1 /*slot */, data);
       setValue(CB, res);
-    } else if (f->getName().equals("__sea_get_extptr_slot0_hm")) {
+    } else if (f->getName() == "__sea_get_extptr_slot0_hm") {
       Expr ptr = lookup(*CB.getOperand(0));
       Expr res = m_ctx.mem().getFatData(ptr, 0 /*slot */);
       setValue(CB, res);
-    } else if (f->getName().equals("__sea_get_extptr_slot1_hm")) {
+    } else if (f->getName() == "__sea_get_extptr_slot1_hm") {
       Expr ptr = lookup(*CB.getOperand(0));
       Expr res = m_ctx.mem().getFatData(ptr, 1 /*slot */);
       setValue(CB, res);
-    } else if (f->getName().equals("__sea_copy_extptr_slots_hm")) {
+    } else if (f->getName() == "__sea_copy_extptr_slots_hm") {
       // convention is copy(dst, src)
       Expr dst = lookup(*CB.getOperand(0));
       Expr src = lookup(*CB.getOperand(1));
@@ -1220,10 +1219,10 @@ public:
       Expr res = m_ctx.mem().setFatData(dst, 0 /*slot */, slot0_data);
       res = m_ctx.mem().setFatData(res, 1 /*slot */, slot1_data);
       setValue(CB, res);
-    } else if (f->getName().equals("__sea_recover_pointer_hm")) {
+    } else if (f->getName() == "__sea_recover_pointer_hm") {
       Expr fat_ptr = lookup(*CB.getOperand(0));
       setValue(CB, fat_ptr);
-    } else if (f->getName().equals("sea.set_fatptr_slot")) {
+    } else if (f->getName() == "sea.set_fatptr_slot") {
       Expr ptr = lookup(*CB.getOperand(0));
       Expr slot = lookup(*CB.getOperand(1));
       if (!m_ctx.alu().isNum(slot)) {
@@ -1234,7 +1233,7 @@ public:
       Expr data = lookup(*CB.getOperand(2));
       Expr res = m_ctx.mem().setFatData(ptr, slotNum, data);
       setValue(CB, res);
-    } else if (f->getName().equals("sea.get_fatptr_slot")) {
+    } else if (f->getName() == "sea.get_fatptr_slot") {
       Expr ptr = lookup(*CB.getOperand(0));
       Expr slot = lookup(*CB.getOperand(1));
       if (!m_ctx.alu().isNum(slot)) {
@@ -1266,7 +1265,7 @@ public:
     Expr op = lookup(*CB.getOperand(0));
     assert(op);
 
-    if (f.getName().equals("verifier.assume.not"))
+    if (f.getName() == "verifier.assume.not")
       op = boolop::lneg(op);
 
     if (!isOpX<TRUE>(op)) {
@@ -1300,7 +1299,7 @@ public:
 
   void visitShadowMemCall(CallBase &CB) {
     const auto &F = *getCalledFunction(CB);
-    if (F.getName().equals("shadow.mem.init")) {
+    if (F.getName() == "shadow.mem.init") {
       unsigned id = shadow_dsa::getShadowId(CB);
       (void)id;
       assert(id >= 0);
@@ -1308,7 +1307,7 @@ public:
       return;
     }
 
-    if (F.getName().equals("shadow.mem.load")) {
+    if (F.getName() == "shadow.mem.load") {
       const Value &v = *CB.getOperand(1);
       Expr reg = m_ctx.mkRegister(v);
       m_ctx.read(reg);
@@ -1317,7 +1316,7 @@ public:
       return;
     }
 
-    if (F.getName().equals("shadow.mem.trsfr.load")) {
+    if (F.getName() == "shadow.mem.trsfr.load") {
       const Value &v = *CB.getOperand(1);
       Expr reg = m_ctx.mkRegister(v);
       m_ctx.read(reg);
@@ -1329,7 +1328,7 @@ public:
       return;
     }
 
-    if (F.getName().equals("shadow.mem.store")) {
+    if (F.getName() == "shadow.mem.store") {
       Expr memOut = m_ctx.mkRegister(CB);
       Expr memIn = m_ctx.getRegister(*CB.getOperand(1));
       m_ctx.read(memIn);
@@ -1346,12 +1345,12 @@ public:
       return;
     }
 
-    if (F.getName().equals("shadow.mem.arg.ref")) {
+    if (F.getName() == "shadow.mem.arg.ref") {
       m_ctx.pushParameter(lookup(*CB.getOperand(1)));
       return;
     }
 
-    if (F.getName().equals("shadow.mem.arg.mod")) {
+    if (F.getName() == "shadow.mem.arg.mod") {
       m_ctx.pushParameter(lookup(*CB.getOperand(1)));
       Expr reg = m_ctx.mkRegister(CB);
       assert(reg);
@@ -1359,7 +1358,7 @@ public:
       return;
     }
 
-    if (F.getName().equals("shadow.mem.arg.new")) {
+    if (F.getName() == "shadow.mem.arg.new") {
       Expr reg = m_ctx.mkRegister(CB);
       m_ctx.pushParameter(m_ctx.havoc(reg));
       return;
@@ -1367,29 +1366,29 @@ public:
 
     const Function &PF = *CB.getParent()->getParent();
 
-    if (F.getName().equals("shadow.mem.in")) {
-      if (PF.getName().equals("main"))
+    if (F.getName() == "shadow.mem.in") {
+      if (PF.getName() == "main")
         setValue(CB, havoc(CB));
       else
         lookup(*CB.getOperand(1));
       return;
     }
 
-    if (F.getName().equals("shadow.mem.out")) {
-      if (PF.getName().equals("main"))
+    if (F.getName() == "shadow.mem.out") {
+      if (PF.getName() == "main")
         setValue(CB, havoc(CB));
       else
         lookup(*CB.getOperand(1));
       return;
     }
 
-    if (F.getName().equals("shadow.mem.arg.init")) {
-      if (PF.getName().equals("main"))
+    if (F.getName() == "shadow.mem.arg.init") {
+      if (PF.getName() == "main")
         setValue(CB, havoc(CB));
       return;
     }
 
-    if (F.getName().equals("shadow.mem.global.init")) {
+    if (F.getName() == "shadow.mem.global.init") {
       Expr memOut = m_ctx.mkRegister(CB);
       Expr memIn = m_ctx.getRegister(*CB.getOperand(1));
       m_ctx.read(memIn);
@@ -1625,8 +1624,6 @@ public:
     case Intrinsic::readcyclecounter:
 
     case Intrinsic::eh_typeid_for:
-
-    case Intrinsic::flt_rounds:
 
     case Intrinsic::lifetime_start:
     case Intrinsic::lifetime_end: {
@@ -2650,10 +2647,10 @@ public:
       if (fn.hasAddressTaken()) {
         // XXX hard-coded. should be based on use
         // XXX some functions have their address taken for llvm.used
-        if (fn.getName().equals("verifier.error") ||
-            fn.getName().startswith("verifier.assume") ||
-            fn.getName().equals("seahorn.fail") ||
-            fn.getName().startswith("shadow.mem"))
+        if (fn.getName() == "verifier.error" ||
+            fn.getName().starts_with("verifier.assume") ||
+            fn.getName() == "seahorn.fail" ||
+            fn.getName().starts_with("shadow.mem"))
           continue;
         if (m_sem.isSkipped(fn))
           continue;
@@ -2667,14 +2664,14 @@ public:
     for (const GlobalVariable &gv : M.globals()) {
       if (m_sem.isSkipped(gv))
         continue;
-      if (gv.getSection().equals("llvm.metadata")) {
+      if (gv.getSection() == "llvm.metadata") {
         LOG("opsem", WARN << "Skipping global variable marked "
                              "by llvm.metadata section: @"
                           << gv.getName(););
         continue;
       }
-      if (gv.getName().equals("llvm.global_ctors") ||
-          gv.getName().equals("llvm.global_dtors")) {
+      if (gv.getName() == "llvm.global_ctors" ||
+          gv.getName() == "llvm.global_dtors") {
         continue;
       }
       Expr symReg = m_ctx.mkRegister(gv);
@@ -2687,10 +2684,10 @@ public:
     for (const GlobalVariable &gv : M.globals()) {
       if (m_sem.isSkipped(gv))
         continue;
-      if (gv.getSection().equals("llvm.metadata"))
+      if (gv.getSection() == "llvm.metadata")
         continue;
-      if (gv.getName().equals("llvm.global_ctors") ||
-          gv.getName().equals("llvm.global_dtors")) {
+      if (gv.getName() == "llvm.global_ctors" ||
+          gv.getName() == "llvm.global_dtors") {
         continue;
       }
       m_ctx.mem().initGlobalVariable(gv);
@@ -2703,7 +2700,7 @@ public:
     Function &F = *BB.getParent();
     /// -- check if globals need to be initialized
     if (&F.getEntryBlock() == &BB) {
-      if (F.getName().equals("main"))
+      if (F.getName() == "main")
         visitModule(*F.getParent());
       m_ctx.onFunctionEntry(*BB.getParent());
     }
@@ -3076,17 +3073,10 @@ Expr Bv2OpSemContext::mkRegister(const llvm::Instruction &inst) {
     // if memory is single cell, allocate regular register
     if (scalar) {
       assert(scalar->getType()->isPointerTy());
-      Type &eTy = *cast<PointerType>(scalar->getType())->getElementType();
       // -- create a constant with the name v[scalar]
-      if (eTy.isPointerTy()) {
-        reg = bind::mkConst(
-            op::array::select(v, mkTerm<const Value *>(scalar, efac())),
-            mem().ptrSort());
-      } else {
-        reg = bind::mkConst(
-            op::array::select(v, mkTerm<const Value *>(scalar, efac())),
-            alu().intTy(m_sem.sizeInBits(eTy)));
-      }
+      reg = bind::mkConst(
+          op::array::select(v, mkTerm<const Value *>(scalar, efac())),
+          mem().ptrSort());
     }
 
     // if tracking memory content, create array-valued register for
@@ -3182,8 +3172,8 @@ Expr Bv2OpSemContext::getConstantValue(const llvm::Constant &c) {
   if (c.getType()->isIntegerTy()) {
     ConstantExprEvaluator ce(m_sem.getDataLayout());
     auto GVO = ce.evaluate(&c);
-    if (GVO.hasValue()) {
-      GenericValue gv = GVO.getValue();
+    if (GVO.has_value()) {
+      GenericValue gv = GVO.value();
       expr::mpz_class k = toMpz(gv.IntVal);
       return alu().num(k, m_sem.sizeInBits(c));
     }
@@ -3191,12 +3181,12 @@ Expr Bv2OpSemContext::getConstantValue(const llvm::Constant &c) {
     ConstantExprEvaluator ce(m_sem.getDataLayout());
     ce.setContext(*this);
     auto GVO = ce.evaluate(&c);
-    if (GVO.hasValue()) {
-      auto &gv = GVO.getValue();
+    if (GVO.has_value()) {
+      auto &gv = GVO.value();
       if (!gv.AggregateVal.empty()) {
         auto vecBv0 = m_sem.vec(c.getType(), gv.AggregateVal, *this);
-        if (vecBv0.hasValue()) {
-          const APInt &vecBv = vecBv0.getValue();
+        if (vecBv0.has_value()) {
+          const APInt &vecBv = vecBv0.value();
           expr::mpz_class k = toMpz(vecBv);
           return alu().num(k, vecBv.getBitWidth());
         }
@@ -3207,12 +3197,12 @@ Expr Bv2OpSemContext::getConstantValue(const llvm::Constant &c) {
     ConstantExprEvaluator ce(m_sem.getDataLayout());
     ce.setContext(*this);
     auto GVO = ce.evaluate(&c);
-    if (GVO.hasValue()) {
-      GenericValue &gv = GVO.getValue();
+    if (GVO.has_value()) {
+      GenericValue &gv = GVO.value();
       if (!gv.AggregateVal.empty()) {
         auto aggBvO = m_sem.agg(c.getType(), gv.AggregateVal, *this);
-        if (aggBvO.hasValue()) {
-          const APInt &aggBv = aggBvO.getValue();
+        if (aggBvO.has_value()) {
+          const APInt &aggBv = aggBvO.value();
           expr::mpz_class k = toMpz(aggBv);
           return alu().num(k, aggBv.getBitWidth());
         }
@@ -3477,7 +3467,7 @@ bool Bv2OpSem::isSkipped(const Value &v) const {
     if (v.hasOneUse())
       if (const CallInst *ci = dyn_cast<const CallInst>(*v.user_begin()))
         if (const Function *fn = ci->getCalledFunction())
-          if (fn->getName().startswith("shadow.mem"))
+          if (fn->getName().starts_with("shadow.mem"))
             return true;
     return m_trackLvl < PTR;
   }
@@ -3502,7 +3492,7 @@ bool Bv2OpSem::isSkipped(const Value &v) const {
   case Type::MetadataTyID:
     ERR << "Unexpected metadata type";
     llvm_unreachable(nullptr);
-  case Type::X86_MMXTyID:
+  case Type::X86_AMXTyID:
     LOG("opsem", WARN << "Unsupported X86 type\n");
     return true;
   case Type::TokenTyID:
@@ -3592,9 +3582,9 @@ void Bv2OpSem::intraBr(seahorn::details::Bv2OpSemContext &C,
     if (const Constant *cv = dyn_cast<const Constant>(&c)) {
       ConstantExprEvaluator ce(getDataLayout());
       auto gv = ce.evaluate(cv);
-      assert(gv.hasValue());
-      if ((gv->IntVal.isOneValue() && br->getSuccessor(0) != &dst) ||
-          (gv->IntVal.isNullValue() && br->getSuccessor(1) != &dst)) {
+      assert(gv.has_value());
+      if ((gv->IntVal.isOne() && br->getSuccessor(0) != &dst) ||
+          (gv->IntVal.isZero() && br->getSuccessor(1) != &dst)) {
         C.resetSide();
         C.addScopedSide(C.read(errorFlag(*C.getCurrBb())));
       }
@@ -3681,9 +3671,9 @@ void Bv2OpSem::execBr(const BasicBlock &src, const BasicBlock &dst,
   intraBr(ctx, dst);
 }
 
-Optional<APInt> Bv2OpSem::agg(Type *aggTy,
-                              const std::vector<GenericValue> &elements,
-                              details::Bv2OpSemContext &ctx) {
+std::optional<APInt> Bv2OpSem::agg(Type *aggTy,
+                                   const std::vector<GenericValue> &elements,
+                                   details::Bv2OpSemContext &ctx) {
   APInt res;
   APInt next;
   int resWidth = 0; // treat initial res as empty
@@ -3707,15 +3697,15 @@ Optional<APInt> Bv2OpSem::agg(Type *aggTy,
                           << " to convert in aggregate.";);
         llvm_unreachable(
             "Only support converting Int or Pointer in aggregates");
-        return llvm::None;
+        return std::nullopt;
       }
     } else {
       auto AIO = agg(ElmTy, element.AggregateVal, ctx);
-      if (AIO.hasValue())
-        next = AIO.getValue();
+      if (AIO.has_value())
+        next = AIO.value();
       else {
         LOG("opsem", WARN << "nested struct conversion failed";);
-        return llvm::None;
+        return std::nullopt;
       }
     }
     // Add padding to element
@@ -3738,9 +3728,9 @@ Optional<APInt> Bv2OpSem::agg(Type *aggTy,
   return res;
 }
 
-Optional<APInt> Bv2OpSem::vec(Type *vecTy,
-                              const std::vector<GenericValue> &elements,
-                              details::Bv2OpSemContext &ctx) {
+std::optional<APInt> Bv2OpSem::vec(Type *vecTy,
+                                   const std::vector<GenericValue> &elements,
+                                   details::Bv2OpSemContext &ctx) {
 
   assert(vecTy->isVectorTy());
   unsigned resBits = getDataLayout().getTypeSizeInBits(vecTy);
@@ -3841,7 +3831,8 @@ const llvm::ConstantRange Bv2OpSem::getLVIInstRng(llvm::Instruction &I) {
     if (fn) {
       auto it = m_lvi_map->find(fn);
       if (it != m_lvi_map->end()) {
-        return it->second->getLVI().getConstantRange(dyn_cast<Value>(&I), &I);
+        return it->second->getLVI().getConstantRange(dyn_cast<Value>(&I), &I,
+                                                     false);
       }
     }
   }

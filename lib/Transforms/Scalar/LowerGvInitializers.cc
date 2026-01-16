@@ -178,7 +178,7 @@ bool LowerGvInitializers::runOnModule(Module &M) {
   // Iterate over global variables
   for (GlobalVariable *gv : gvs) {
     // XXX: skip global variables used by seahorn for instrumentation
-    if (gv->getName().startswith("sea_"))
+    if (gv->getName().starts_with("sea_"))
       continue;
 
     // First we try to promote the global variable to a stack variable
@@ -188,7 +188,7 @@ bool LowerGvInitializers::runOnModule(Module &M) {
       if (!AddressTaken && !GS.HasMultipleAccessingFunctions &&
           GS.AccessingFunction && GS.AccessingFunction->getName() == "main" &&
           allNonInstructionUsersCanBeMadeInstructions(gv)) {
-        Type *ElemTy = gv->getType()->getElementType();
+        Type *ElemTy = gv->getValueType();
         AllocaInst *Alloca =
             Builder.CreateAlloca(ElemTy, nullptr, gv->getName());
         Builder.CreateAlignedStore(gv->getInitializer(), Alloca,
@@ -205,7 +205,7 @@ bool LowerGvInitializers::runOnModule(Module &M) {
     PointerType *ty = dyn_cast<PointerType>(gv->getType());
     if (!ty)
       continue;
-    Type *ety = ty->getElementType();
+    Type *ety = gv->getValueType();
 
     // Only deal with scalars and simple structs for now.
     // TODO: Support other kinds of initializers.

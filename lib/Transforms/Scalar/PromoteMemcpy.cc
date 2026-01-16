@@ -26,6 +26,25 @@
 using namespace llvm;
 
 namespace {
+
+// Helper to extract element type from a pointer value by tracing its origin
+// Needed for LLVM 20 opaque pointers where type info isn't in pointer types
+static Type *getPointerElementTypeFromValue(Value *Ptr) {
+  // Try to get type from the value's origin
+  if (AllocaInst *AI = dyn_cast<AllocaInst>(Ptr)) {
+    return AI->getAllocatedType();
+  }
+  if (GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(Ptr)) {
+    return GEP->getSourceElementType();
+  }
+  // For bitcast, recurse on operand (though bitcasts are rare with opaque pointers)
+  if (BitCastInst *BC = dyn_cast<BitCastInst>(Ptr)) {
+    return getPointerElementTypeFromValue(BC->getOperand(0));
+  }
+  // If we can't determine, return nullptr
+  return nullptr;
+}
+
 class PromoteMemcpy : public FunctionPass {
 public:
   static char ID;
@@ -107,7 +126,9 @@ bool PromoteMemcpy::simplifyMemCpy(MemCpyInst *MI) {
     return false;
   }
 
-  if (!SrcPtrTy->getPointerElementType()->isFirstClassType()) {
+  // With LLVM 20 opaque pointers, trace pointer origin to find element type
+  Type *SrcElemTy = getPointerElementTypeFromValue(SrcPtr);
+  if (!SrcElemTy || !SrcElemTy->isFirstClassType()) {
     PMCPY_LOG(WARN << "Not a first class type! " << *MI;);
     return false;
   }
@@ -117,7 +138,7 @@ bool PromoteMemcpy::simplifyMemCpy(MemCpyInst *MI) {
                 DstPtr->print(errs()); DstPtrTy->print(errs() << "\t");
                 errs() << "\n"; errs().flush());
 
-  auto *BufferTy = dyn_cast<StructType>(SrcPtrTy->getPointerElementType());
+  auto *BufferTy = dyn_cast<StructType>(SrcElemTy);
   // require src to be a struct
   if (!BufferTy) {
     PMCPY_LOG(WARN << "memcpy on non-struct types: " << *MI;);
@@ -145,19 +166,19 @@ bool PromoteMemcpy::simplifyMemCpy(MemCpyInst *MI) {
   //   *GEP(Dst, field_id) = *GEP(Src, field_id)
   //
 
-  using Transfer = std::pair<Value *, Value *>;
-  SmallVector<Transfer, 4> ToLower = {std::make_pair(SrcPtr, DstPtr)};
+  // Track types explicitly for LLVM 20 opaque pointers
+  using Transfer = std::tuple<Value *, Value *, Type *>;
+  SmallVector<Transfer, 4> ToLower = {std::make_tuple(SrcPtr, DstPtr, BufferTy)};
   while (!ToLower.empty()) {
     Value *TrSrc, *TrDst;
-    std::tie(TrSrc, TrDst) = ToLower.pop_back_val();
-    auto *Ty = TrSrc->getType();
-    assert(Ty == TrDst->getType());
+    Type *TrType;
+    std::tie(TrSrc, TrDst, TrType) = ToLower.pop_back_val();
+    assert(TrSrc->getType()->isPointerTy());
+    assert(TrDst->getType()->isPointerTy());
 
-    if (!Ty->isStructTy()) {
-      assert(TrSrc->getType()->isPointerTy());
-      auto *TrSrcPtr = cast<PointerType>(TrSrc->getType());
-      auto *LoadedTy = TrSrcPtr->getPointerElementType();
-      auto *NewLoad = Builder.CreateLoad(LoadedTy, TrSrc, SrcPtr->getName() + ".pmcpy");
+    if (!TrType->isStructTy()) {
+      // Perform load/store with explicit type for opaque pointers
+      auto *NewLoad = Builder.CreateLoad(TrType, TrSrc, SrcPtr->getName() + ".pmcpy");
       auto *NewStore = Builder.CreateStore(NewLoad, TrDst);
 
       PMCPY_DBG_LOG(errs() << "New load-store:\n\t"; NewLoad->print(errs());
@@ -165,14 +186,17 @@ bool PromoteMemcpy::simplifyMemCpy(MemCpyInst *MI) {
       continue;
     }
 
+    // For struct types, create GEPs for each field with explicit type
+    auto *StructTy = cast<StructType>(TrType);
     SmallVector<Transfer, 8> TmpBuff;
-    for (unsigned i = 0, e = Ty->getStructNumElements(); i != e; ++i) {
+    for (unsigned i = 0, e = StructTy->getNumElements(); i != e; ++i) {
       auto *Idx = Constant::getIntegerValue(I32Ty, APInt(32, i));
-      auto *SrcGEP = Builder.CreateInBoundsGEP(nullptr, SrcPtr, {NullInt, Idx},
+      auto *SrcGEP = Builder.CreateInBoundsGEP(StructTy, TrSrc, {NullInt, Idx},
                                                "src.gep.pmcpy");
-      auto *DstGEP = Builder.CreateInBoundsGEP(nullptr, DstPtr, {NullInt, Idx},
-                                               "buffer.gep.pmcpy");
-      TmpBuff.push_back({SrcGEP, DstGEP});
+      auto *DstGEP = Builder.CreateInBoundsGEP(StructTy, TrDst, {NullInt, Idx},
+                                               "dst.gep.pmcpy");
+      Type *FieldTy = StructTy->getElementType(i);
+      TmpBuff.push_back({SrcGEP, DstGEP, FieldTy});
     }
 
     for (auto &P : llvm::reverse(TmpBuff))

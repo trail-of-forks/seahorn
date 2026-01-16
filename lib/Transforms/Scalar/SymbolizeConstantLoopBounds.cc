@@ -95,7 +95,8 @@ class SymbolizeConstantLoopBounds : public FunctionPass {
         return false;
       }
 
-      CallInst *nd = B.CreateCall(nondetFn, None, "loop.bound");
+      // LLVM 20: 'None' replaced with empty ArrayRef
+      CallInst *nd = B.CreateCall(nondetFn, ArrayRef<Value*>(), "loop.bound");
       Value *symBound = B.CreateSExtOrTrunc(nd, CstBound->getType());
       updateCallGraph(F, nd);
       CallInst *assumption =
@@ -213,7 +214,8 @@ public:
           Function *fn = dyn_cast<Function>(
               M->getOrInsertFunction("verifier.nondet.bool", as, boolTy)
                   .getCallee());
-          B.CreateCondBr(B.CreateCall(fn, None, "nd.loop.cond"), body, succ);
+          // LLVM 20: 'None' replaced with empty ArrayRef
+          B.CreateCondBr(B.CreateCall(fn, ArrayRef<Value*>(), "nd.loop.cond"), body, succ);
           BI->eraseFromParent();
           B.SetInsertPoint(&entry);
           B.CreateBr(header);

@@ -24,8 +24,10 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/AssumptionCache.h"
+#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/LoopPass.h"
 #include "llvm/Analysis/ScalarEvolution.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Transforms/Scalar.h"
@@ -49,7 +51,7 @@ public:
   bool runOnFunction(Function &F) override;
 
   bool runOnLoop(Loop *L, LoopInfo &LI) {
-    DOG(MSG << "Cutting loop: " << *L;);
+    DOG(MSG << "Cutting loop: " << L;);
 
     if (!canCutLoop(L))
       return false;
@@ -117,7 +119,7 @@ bool CutLoopsPass::runOnFunction(Function &F) {
 }
 
 bool seahorn::canCutLoop(Loop *L) {
-  DOG(MSG << "Checking loop to cut: " << *L;);
+  DOG(MSG << "Checking loop to cut: " << L;);
   BasicBlock *preheader = L->getLoopPreheader();
   if (!preheader) {
     DOG(WARN << "no-cut: no pre-header");

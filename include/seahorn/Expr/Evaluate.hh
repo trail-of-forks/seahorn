@@ -2,6 +2,7 @@
 #include "seahorn/Expr/EvalModel.hh"
 #include "seahorn/Expr/EvalUtils.hh"
 #include "seahorn/Expr/ExprCore.hh"
+#include "seahorn/Support/CompatFunctional.hh"
 
 namespace expr {
 namespace eval {

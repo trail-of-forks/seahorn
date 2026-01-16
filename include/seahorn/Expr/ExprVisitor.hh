@@ -5,6 +5,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <unordered_map>
+#include "seahorn/Support/CompatFunctional.hh"
 
 namespace expr {
 struct BoolExprFn {

@@ -8,6 +8,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/AssumptionCache.h"
+#include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/LoopPass.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/IR/Dominators.h"
@@ -137,7 +138,9 @@ bool LoopPeelerPass::runOnLoop(Loop *L, LPPassManager &LPM) {
     return false;
   }
 
-  auto res = peelLoop(L, m_Num, &LI, SE, *DT, AC, false /* PreserveLCSSA */);
+  // LLVM 20: peelLoop requires ValueToValueMapTy parameter
+  ValueToValueMapTy VMap;
+  auto res = peelLoop(L, m_Num, &LI, SE, *DT, AC, false /* PreserveLCSSA */, VMap);
   if (res)
     LoopsPeeled++;
   else

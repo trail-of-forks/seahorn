@@ -590,7 +590,7 @@ struct OpSemVisitor : public InstVisitor<OpSemVisitor>, OpSemBase {
       return;
 
     // -- skip return argument of main
-    if (I.getParent()->getParent()->getName().equals("main"))
+    if (I.getParent()->getParent()->getName() == "main")
       return;
 
     if (I.getNumOperands() > 0)
@@ -703,7 +703,7 @@ struct OpSemVisitor : public InstVisitor<OpSemVisitor>, OpSemBase {
       return;
     }
 
-    if (F.getName().startswith("verifier.assume")) {
+    if (F.getName().starts_with("verifier.assume")) {
       if (isa<UndefValue>(CB.getOperand(0))) {
         WARN << "`undef` in assumption: " << CB << " in BB: " << BB.getName()
              << "\n";
@@ -711,13 +711,13 @@ struct OpSemVisitor : public InstVisitor<OpSemVisitor>, OpSemBase {
       }
 
       Expr c = lookup(*CB.getOperand(0));
-      if (F.getName().equals("verifier.assume.not"))
+      if (F.getName() == "verifier.assume.not")
         c = boolop::lneg(c);
 
       assert(m_fparams.size() == 3);
       // -- assumption is only active when error flag is false
       addCondSide(boolop::lor(m_s.read(m_sem.errorFlag(BB)), c));
-    } else if (F.getName().equals("calloc") && m_inMem && m_outMem &&
+    } else if (F.getName() == "calloc" && m_inMem && m_outMem &&
                m_sem.isTracked(CB)) {
       havoc(CB);
       assert(m_fparams.size() == 3);
@@ -765,7 +765,7 @@ struct OpSemVisitor : public InstVisitor<OpSemVisitor>, OpSemBase {
         }
       }
     }
-    // else if (F.getName ().equals ("verifier.assert"))
+    // else if (F.getName () == "verifier.assert")
     // {
     //   Expr ein = m_s.read (m_sem.errorFlag ());
     //   Expr eout = m_s.havoc (m_sem.errorFlag ());
@@ -774,7 +774,7 @@ struct OpSemVisitor : public InstVisitor<OpSemVisitor>, OpSemBase {
     //                                   mk<EQ> (ein, eout)));
     //   m_side.push_back (boolop::limp (boolop::lneg (cond), eout));
     // }
-    // else if (F.getName ().equals ("verifier.error"))
+    // else if (F.getName () == "verifier.error")
     //   m_side.push_back (m_s.havoc (m_sem.errorFlag ()));
     else if (m_sem.hasFunctionInfo(F)) {
 
@@ -799,24 +799,24 @@ struct OpSemVisitor : public InstVisitor<OpSemVisitor>, OpSemBase {
       m_outRegions.clear();
       m_outValues.clear();
       m_regionValues.clear();
-    } else if (F.getName().startswith("shadow.mem")) {
+    } else if (F.getName().starts_with("shadow.mem")) {
       if (!m_sem.isTracked(CB))
         return;
 
-      if (F.getName().equals("shadow.mem.init")) {
+      if (F.getName() == "shadow.mem.init") {
         Expr mem = m_s.havoc(symb(CB));
-        if (PF.getName().equals("main") || FMapsMemInit)
+        if (PF.getName() == "main" || FMapsMemInit)
           m_sem.execMemInit(CB, mem, m_side, m_s);
-      } else if (F.getName().equals("shadow.mem.load")) {
+      } else if (F.getName() == "shadow.mem.load") {
         const Value &v = *CB.getOperand(1);
         m_inMem = m_s.read(symb(v));
         m_uniq = extractUniqueScalar(CB) != nullptr;
-      } else if (F.getName().equals("shadow.mem.store")) {
+      } else if (F.getName() == "shadow.mem.store") {
         m_inMem = m_s.read(symb(*CB.getOperand(1)));
         m_outMem = m_s.havoc(symb(CB));
         m_uniq = extractUniqueScalar(CB) != nullptr;
         m_outValue = &CB;
-      } else if (F.getName().equals("shadow.mem.global.init")) {
+      } else if (F.getName() == "shadow.mem.global.init") {
         m_inMem = m_s.read(symb(*CB.getOperand(1)));
         if (fmap::isFiniteMap(m_inMem))
           write(CB, m_inMem);
@@ -824,10 +824,10 @@ struct OpSemVisitor : public InstVisitor<OpSemVisitor>, OpSemBase {
           m_outMem = m_s.havoc(symb(CB));
           m_side.push_back(mk<EQ>(m_outMem, m_inMem));
         }
-      } else if (F.getName().equals("shadow.mem.arg.ref")) {
+      } else if (F.getName() == "shadow.mem.arg.ref") {
         m_fparams.push_back(m_s.read(symb(*CB.getOperand(1))));
         m_regionValues.push_back(CB.getOperand(1));
-      } else if (F.getName().equals("shadow.mem.arg.mod")) {
+      } else if (F.getName() == "shadow.mem.arg.mod") {
         auto in_par = m_s.read(symb(*CB.getOperand(1)));
         m_regionValues.push_back(CB.getOperand(1));
         m_fparams.push_back(in_par);
@@ -837,24 +837,22 @@ struct OpSemVisitor : public InstVisitor<OpSemVisitor>, OpSemBase {
         m_outRegions.push_back(out_par);
         m_outValues.push_back(&CB);
         m_regionValues.push_back(&CB);
-      } else if (F.getName().equals("shadow.mem.arg.new")) {
+      } else if (F.getName() == "shadow.mem.arg.new") {
         m_fparams.push_back(m_s.havoc(symb(CB)));
         m_regionValues.push_back(&CB);
-      } else if (!PF.getName().equals("main") &&
-                 F.getName().equals("shadow.mem.in")) {
+      } else if (PF.getName() != "main" && F.getName() == "shadow.mem.in") {
         m_s.read(symb(*CB.getOperand(1)));
-      } else if (!PF.getName().equals("main") &&
-                 F.getName().equals("shadow.mem.out")) {
+      } else if (PF.getName() != "main" && F.getName() == "shadow.mem.out") {
         m_s.read(symb(*CB.getOperand(1)));
-      } else if (!PF.getName().equals("main") &&
-                 F.getName().equals("shadow.mem.arg.init")) {
+      } else if (PF.getName() != "main" &&
+                 F.getName() == "shadow.mem.arg.init") {
         if (FMapsMemInit)
           m_sem.execMemInit(CB, m_s.read(symb(CB)), m_side, m_s);
         // regions initialized in main are global. We want them to
         // flow to the arguments
         /* do nothing */
-      } else if (PF.getName().equals("main") &&
-                 F.getName().equals("shadow.mem.arg.init")) {
+      } else if (PF.getName() == "main" &&
+                 F.getName() == "shadow.mem.arg.init") {
         // initialize the keys of the regions in the main function
         m_sem.execMemInit(CB, m_s.read(symb(CB)), m_side, m_s);
       }
@@ -1012,7 +1010,7 @@ struct OpSemVisitor : public InstVisitor<OpSemVisitor>, OpSemBase {
     const Function &F = *BB.getParent();
     if (&F.getEntryBlock() != &BB)
       return;
-    if (!F.getName().equals("main"))
+    if (F.getName() != "main")
       return;
 
     const Module &M = *F.getParent();
@@ -1243,7 +1241,7 @@ bool UfoOpSem::isTracked(const Value &v) const {
     if (v.hasOneUse())
       if (const CallInst *ci = dyn_cast<const CallInst>(*v.user_begin()))
         if (const Function *fn = ci->getCalledFunction())
-          if (fn->getName().startswith("shadow.mem"))
+          if (fn->getName().starts_with("shadow.mem"))
             return false;
 
     return m_trackLvl >= PTR;
@@ -1505,8 +1503,8 @@ bool MemUfoOpSem::hasOrigMemS(const Cell &c, MemOpt ao) {
 void MemUfoOpSem::addCIMemS(CallInst *CI, Expr A, MemOpt ao) {
 
   auto opt_c = m_shadowDsa->getShadowMemCell(*CI);
-  assert(opt_c.hasValue());
-  addMemS(opt_c.getValue(), A, ao);
+  assert(opt_c.has_value());
+  addMemS(opt_c.value(), A, ao);
 }
 
 void MemUfoOpSem::addMemS(const Cell &c, Expr A, MemOpt ao) {
@@ -1694,13 +1692,13 @@ void MemUfoOpSem::processShadowMemsCallBase(CallBaseInfo &csi) {
     if (f_callee == nullptr)
       break;
 
-    if (f_callee->getName().equals("shadow.mem.arg.ref"))
+    if (f_callee->getName() == "shadow.mem.arg.ref")
       addCIMemS(ci, csi.m_fparams[i], MemOpt::IN);
-    else if (f_callee->getName().equals("shadow.mem.arg.mod")) {
+    else if (f_callee->getName() == "shadow.mem.arg.mod") {
       addCIMemS(ci, csi.m_fparams[i], MemOpt::OUT);
       i--;
       addCIMemS(ci, csi.m_fparams[i], MemOpt::IN);
-    } else if (f_callee->getName().equals("shadow.mem.arg.new"))
+    } else if (f_callee->getName() == "shadow.mem.arg.new")
       addCIMemS(ci, csi.m_fparams[i], MemOpt::IN);
     else
       break;
@@ -1768,8 +1766,8 @@ Expr FMapUfoOpSem::symb(const Value &I) {
 
         if (const CallInst *CI = dyn_cast<const CallInst>(&I)) {
           auto opt_c = m_shadowDsa->getShadowMemCell(*CI);
-          assert(opt_c.hasValue());
-          const Cell &c = opt_c.getValue();
+          assert(opt_c.has_value());
+          const Cell &c = opt_c.value();
           if (m_preproc->isSafeNodeFunc(*const_cast<Node *>(c.getNode()), F)) {
             unsigned nKs = m_preproc->getNumKeys(c, F);
             if ((nKs > 0) && // may be safe but not accessed
@@ -1806,9 +1804,9 @@ Expr FMapUfoOpSem::symb(const Value &I) {
       if (g.hasCell(I)) {
         const Cell &c = g.getCell(I);
         if (c.getNode()->size() > 0 || c.getNode()->isOffsetCollapsed()) {
-          llvm::Optional<unsigned> opt_cellId = m_shadowDsa->getCellId(c);
-          if (opt_cellId.hasValue())
-            return fmap::tagCell(UfoOpSem::symb(I), opt_cellId.getValue(),
+          std::optional<unsigned> opt_cellId = m_shadowDsa->getCellId(c);
+          if (opt_cellId.has_value())
+            return fmap::tagCell(UfoOpSem::symb(I), opt_cellId.value(),
                                  c.getRawOffset());
         }
       }
@@ -1820,8 +1818,8 @@ Expr FMapUfoOpSem::symb(const Value &I) {
 Cell FMapUfoOpSem::getCellValue(const Value *v) {
   if (const CallInst *CI = dyn_cast<const CallInst>(v)) {
     auto opt_c = m_shadowDsa->getShadowMemCell(*CI);
-    assert(opt_c.hasValue());
-    return opt_c.getValue();
+    assert(opt_c.has_value());
+    return opt_c.value();
   } else if (const PHINode *PI = dyn_cast<const PHINode>(v))
     return getCellValue(PI->getIncomingValue(0));
   assert(false);
@@ -2071,8 +2069,8 @@ Expr FMapUfoOpSem::fmVariant(Expr e, const Cell &c, const ExprVector &keys) {
   assert(keys.size() > 0);
 
   auto cid_a = m_shadowDsa->getCellId(c);
-  assert(cid_a.hasValue());
-  unsigned cid = cid_a.getValue();
+  assert(cid_a.has_value());
+  unsigned cid = cid_a.value();
 
   Expr name = fmap::mkCellTag(cid, m_preproc->getOffset(c), m_efac);
 
@@ -2262,13 +2260,13 @@ void FMapUfoOpSem::processShadowMemsCallBase(CallBaseInfo &csi) {
     Function *f_callee = ci->getCalledFunction();
     if (f_callee == nullptr)
       break;
-    else if (f_callee->getName().equals("shadow.mem.arg.ref"))
+    else if (f_callee->getName() == "shadow.mem.arg.ref")
       addCIMemS(ci, csi.m_fparams[i], MemOpt::IN);
-    else if (f_callee->getName().equals("shadow.mem.arg.mod")) {
+    else if (f_callee->getName() == "shadow.mem.arg.mod") {
       addCIMemS(ci, csi.m_fparams[i], MemOpt::OUT);
       i--;
       addCIMemS(ci, csi.m_fparams[i], MemOpt::IN);
-    } else if (f_callee->getName().equals("shadow.mem.arg.new"))
+    } else if (f_callee->getName() == "shadow.mem.arg.new")
       addCIMemS(ci, csi.m_fparams[i], MemOpt::OUT);
     else
       break;
@@ -2284,8 +2282,8 @@ void FMapUfoOpSem::storeSymInitInstruction(Instruction *I, CellExprMap &nim,
   ci = dyn_cast<CallInst>(I);
   assert(ci);
   auto opt_c = m_shadowDsa->getShadowMemCell(*ci);
-  assert(opt_c.hasValue());
-  const Cell &c = opt_c.getValue();
+  assert(opt_c.has_value());
+  const Cell &c = opt_c.value();
   nim.insert({cellToPair(c), memE});
 }
 
@@ -2303,8 +2301,8 @@ void FMapUfoOpSem::execMemInit(CallBase &CB, Expr memE, ExprVector &side,
   CallInst *ci = dyn_cast<CallInst>(I);
   if (ci) {
     Function *f_callee = ci->getCalledFunction();
-    if (f_callee && (f_callee->getName().equals("shadow.mem.arg.init") ||
-                     f_callee->getName().equals("shadow.mem.init")))
+    if (f_callee && (f_callee->getName() == "shadow.mem.arg.init" ||
+                     f_callee->getName() == "shadow.mem.init"))
       return;
   }
   // add the constraints after processing all shadow.mem.arg.init and
@@ -2340,7 +2338,7 @@ void FMapUfoOpSem::execMemInit(CallBase &CB, Expr memE, ExprVector &side,
 
   if (buG.hasRetCell(F)) {
     // traverse all blocks to find return
-    for (auto const &bb : F.getBasicBlockList()) {
+    for (auto const &bb : F) {
       if (const ReturnInst *ret =
               dyn_cast<const ReturnInst>(bb.getTerminator())) {
         const Value &v = *ret->getReturnValue();

@@ -51,7 +51,8 @@ namespace seahorn
           if (!CI) continue;
           Function* CF = CI->getCalledFunction ();
           if (!CF) continue;
-          if (CF->getName ().equals ("verifier.assume")) {
+          // LLVM 20: StringRef::equals replaced with == operator
+          if (CF->getName() == "verifier.assume") {
             if (!assumeFound) assumeFound = true;
             else workList.push_back(CI);
           }

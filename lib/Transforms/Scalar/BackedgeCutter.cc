@@ -7,6 +7,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/CFG.h"
+#include "llvm/IR/Constants.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
@@ -57,7 +58,8 @@ static void createConditionalAssert(BranchInst &TI, Function &F,
                                                     : SeaBuiltinsOp::ASSERT,
                          *F.getParent());
   auto ci = CallInst::Create(assertFn, TI.getCondition(), "", &TI);
-  MDNode *meta = MDNode::get(F.getContext(), None);
+  // LLVM 20: 'None' replaced with empty ArrayRef
+  MDNode *meta = MDNode::get(F.getContext(), ArrayRef<Metadata*>());
   ci->setMetadata("backedge_assert", meta);
   // -- a hack to locate a near-by debug location
   if (TI.getDebugLoc())
@@ -73,7 +75,8 @@ static void createUnconditionalAssert(BranchInst &TI, Function &F,
   auto *assertFn = SBI.mkSeaBuiltinFn(SeaBuiltinsOp::ASSERT, *F.getParent());
   auto ci = CallInst::Create(assertFn, ConstantInt::getFalse(F.getContext()),
                              "", &TI);
-  MDNode *meta = MDNode::get(F.getContext(), None);
+  // LLVM 20: 'None' replaced with empty ArrayRef
+  MDNode *meta = MDNode::get(F.getContext(), ArrayRef<Metadata*>());
   ci->setMetadata("backedge_assert", meta);
   // -- a hack to locate a near-by debug location
   if (TI.getDebugLoc())

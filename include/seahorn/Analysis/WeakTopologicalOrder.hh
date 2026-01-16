@@ -2,6 +2,7 @@
 #define __WEAK_TOPOLOGICAL_ORDER__HH_
 
 #include "llvm/Support/raw_ostream.h"
+#include "seahorn/Support/CompatFunctional.hh"
 
 #include <deque>
 #include <memory>

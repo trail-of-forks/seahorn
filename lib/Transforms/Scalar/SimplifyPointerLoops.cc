@@ -73,10 +73,18 @@ private:
     if (!PhiTy->isPointerTy())
       return false;
 
-    Type *PointerElementType = PhiTy->getPointerElementType();
+    // With LLVM 20 opaque pointers, extract element type from GEP users
+    // Pointer IVs are incremented via GEP, so we find the element type there
+    Type *PointerElementType = nullptr;
+    for (User *U : Phi->users()) {
+      if (GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(U)) {
+        PointerElementType = GEP->getSourceElementType();
+        break;
+      }
+    }
     // The pointer stride cannot be determined if the pointer
     // element type is not sized.
-    if (!PointerElementType->isSized())
+    if (!PointerElementType || !PointerElementType->isSized())
       return false;
 
     // Check that the PHI is a recurrence.

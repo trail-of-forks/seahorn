@@ -1,5 +1,7 @@
 #pragma once
 
+#include "llvm/ADT/SmallString.h"
+
 #include "BvOpSem2Context.hh"
 #include "BvOpSem2MemManagerMixin.hh"
 #include "BvOpSem2RawMemMgr.hh"

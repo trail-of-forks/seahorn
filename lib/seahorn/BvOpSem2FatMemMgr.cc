@@ -4,6 +4,7 @@
 #include "BvOpSem2MemManagerMixin.hh"
 #include "BvOpSem2RawMemMgr.hh"
 
+#include "llvm/ADT/SmallString.h"
 #include "llvm/IR/GetElementPtrTypeIterator.h"
 #include "llvm/Support/Format.h"
 
@@ -43,13 +44,6 @@ FatMemManagerCore<T>::mkFatPtr(MainPtrTy mainPtr) const {
     ptrVals.push_back(slotBind);
   }
   return PtrTy(ptrVals);
-}
-
-/// \brief Assembles a fat ptr from parts
-template <class T>
-typename FatMemManagerCore<T>::PtrTy
-FatMemManagerCore<T>::mkFatPtr(llvm::SmallVector<AnyPtrTy, 8> slots) const {
-  return PtrTy(slots);
 }
 
 /// \brief Update a given fat pointer with a "main" address value
@@ -311,7 +305,7 @@ FatMemManagerCore<T>::loadPtrFromMem(PtrTy ptr, MemValTy mem, unsigned byteSz,
                                                  g_slotByteWidth, align);
     ptrVals.push_back(slotVal);
   }
-  return mkFatPtr(ptrVals);
+  return PtrTy(ptrVals);
 }
 
 /// \brief Pointer addition with numeric offset
@@ -409,8 +403,8 @@ Expr FatMemManagerCore<T>::loadValueFromMem(PtrTy ptr, MemValTy mem,
     errs() << "loading form struct type " << ty << " is not supported";
     return res;
   default:
-    SmallString<256> msg;
-    raw_svector_ostream out(msg);
+    llvm::SmallString<256> msg;
+    llvm::raw_svector_ostream out(msg);
     out << "Loading from type: " << ty << " is not supported\n";
     assert(false);
   }
@@ -452,8 +446,8 @@ FatMemManagerCore<T>::storeValueToMem(Expr _val, PtrTy ptr, MemValTy memIn,
     WARN << "Storing struct type " << ty << " is not supported\n";
     return res;
   default:
-    SmallString<256> msg;
-    raw_svector_ostream out(msg);
+    llvm::SmallString<256> msg;
+    llvm::raw_svector_ostream out(msg);
     out << "Loading from type: " << ty << " is not supported\n";
     assert(false);
     report_fatal_error(out.str());
@@ -668,7 +662,7 @@ FatMemManagerCore<T>::setFatData(PtrTy p, unsigned slotIdx, Expr data) {
       ptrVals.push_back(p.getSlot(i));
     }
   }
-  return mkFatPtr(ptrVals);
+  return PtrTy(ptrVals);
 }
 
 template <class T>

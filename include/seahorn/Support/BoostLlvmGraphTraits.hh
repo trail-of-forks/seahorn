@@ -2,6 +2,7 @@
 /// An adapter between llvm::GraphTraits and boost::graph_traits
 
 #include "llvm/ADT/GraphTraits.h"
+#include "seahorn/Support/CompatFunctional.hh"
 
 #include <boost/graph/graph_traits.hpp>
 #include <boost/graph/properties.hpp>

@@ -60,7 +60,7 @@ public:
         Function *CF = CI->getCalledFunction();
         if (!CF)
           continue;
-        if (CF->getName().equals("verifier.error"))
+        if (CF->getName() == "verifier.error")
           Worklist.push_back(CI);
       }
 

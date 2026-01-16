@@ -1,5 +1,6 @@
 #include "seahorn/Expr/ExprLlvm.hh"
 #include "seahorn/Expr/ExprSimplifier.hh"
+#include "seahorn/Support/CompatFunctional.hh"
 
 namespace seahorn {
 namespace path_bmc {

@@ -11,21 +11,28 @@ FROM buildpack-deps:$BASE_IMAGE
 # Install dependencies
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
-  apt-get install -yqq software-properties-common && \
+  apt-get install -yqq software-properties-common wget gpg && \
+  # Add LLVM 20 repository
+  wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /etc/apt/trusted.gpg.d/apt.llvm.org.gpg && \
+  add-apt-repository "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" && \
   apt-get update && \
   apt-get upgrade -yqq && \
   apt-get install -yqq cmake cmake-data unzip \
-      zlib1g-dev \
+      zlib1g-dev libzstd-dev \
       ninja-build libgraphviz-dev \
       libgmp-dev libmpfr-dev \
       libboost1.74-dev \
       python3-pip \
       less vim \
-      gcc-multilib \
       sudo \
       graphviz libgraphviz-dev python3-pygraphviz \
       lcov gcovr rsync \
-      clang-14 lldb-14 lld-14 clang-format-14 && \
+      llvm-20 llvm-20-dev llvm-20-tools llvm-20-runtime \
+      clang-20 lldb-20 lld-20 clang-format-20 && \
+  # Install gcc-multilib only on x86_64/amd64 architecture
+  if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
+    apt-get install -yqq gcc-multilib; \
+  fi && \
   pip3 install lit OutputCheck && \
   pip3 install networkx && \
   mkdir seahorn

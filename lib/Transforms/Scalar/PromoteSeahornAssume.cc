@@ -55,8 +55,8 @@ public:
       if (!fn && CI.getCalledOperand())
         fn = dyn_cast<const Function>(CI.getCalledOperand()->stripPointerCasts());
 
-      if (fn && (fn->getName().equals("verifier.assume") ||
-                 fn->getName().equals("verifier.assume.not"))) {
+      if (fn && (fn->getName() == "verifier.assume" ||
+                 fn->getName() == "verifier.assume.not")) {
         Value *arg = CI.getOperand(0);
         // already used in llvm.assume. skip it.
         if (hasAssumeUsers(*arg))
@@ -69,7 +69,7 @@ public:
             that LLVM does not touch our assumptions.
             Might revisit this in the future.
         */
-        if (fn->getName().equals("verifier.assume.not"))
+        if (fn->getName() == "verifier.assume.not")
           arg = Builder.CreateNot(arg);
         CallInst *c = Builder.CreateAssumption(arg);
         /*
@@ -77,7 +77,7 @@ public:
            use c->getMetadata(seahorn) to test.
         */
         c->setMetadata(F.getParent()->getMDKindID("seahorn"),
-                       MDNode::get(ctx, None));
+                       MDNode::get(ctx, std::nullopt));
         Changed = true;
       }
     }

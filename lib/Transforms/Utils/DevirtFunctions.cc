@@ -82,13 +82,15 @@ AliasSetId typeAliasId(CallBase &CB) {
   assert(isIndirectCall(CB) && "Not an indirect call");
   PointerType *pTy = dyn_cast<PointerType>(CB.getCalledOperand()->getType());
   assert(pTy && "Unexpected call not through a pointer");
-  assert(isa<FunctionType>(pTy->getElementType()) &&
-         "The type of called value is not a pointer to a function");
+  // LLVM 20: With opaque pointers, use getFunctionType() instead of getElementType()
+  FunctionType *FTy = CB.getFunctionType();
+  assert(FTy && "The type of called value is not a function");
   return pTy;
 }
 
 AliasSetId typeAliasId(const Function &F) {
-  return F.getFunctionType()->getPointerTo();
+  // LLVM 20: With opaque pointers, use PointerType::getUnqual instead of getPointerTo
+  return PointerType::getUnqual(F.getContext());
 }
 
 } // namespace devirt_impl
@@ -124,12 +126,12 @@ void CallSiteResolverByTypes::populateTypeAliasSets() {
       continue;
 
     // -- skip seahorn and verifier specific intrinsics
-    if (F.getName().startswith("seahorn."))
+    if (F.getName().starts_with("seahorn."))
       continue;
-    if (F.getName().startswith("verifier."))
+    if (F.getName().starts_with("verifier."))
       continue;
     // -- assume entry point is never called indirectly
-    if (F.getName().equals("main"))
+    if (F.getName() == "main")
       continue;
 
     // -- add F to its corresponding alias set (keep sorted the Targets)

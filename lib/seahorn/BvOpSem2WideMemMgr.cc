@@ -183,8 +183,8 @@ WideMemManager::storeValueToMem(Expr _val, WideMemManager::PtrTy ptr,
     WARN << "Storing struct type " << ty << " is not supported\n";
     return res;
   default:
-    SmallString<256> msg;
-    raw_svector_ostream out(msg);
+    llvm::SmallString<256> msg;
+    llvm::raw_svector_ostream out(msg);
     out << "Loading from type: " << ty << " is not supported\n";
     assert(false);
   }
