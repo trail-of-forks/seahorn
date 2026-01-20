@@ -7,12 +7,16 @@
 
 #include "llvm_seahorn/InitializePasses.h"
 #include "llvm_seahorn/Transforms/IPO.h"
+#include "llvm/Analysis/CGSCCPassManager.h"
+#include "llvm/Analysis/LoopAnalysisManager.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/PassManager.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/LinkAllPasses.h"
+#include "llvm/Passes/PassBuilder.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FileSystem.h"
@@ -23,6 +27,11 @@
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/IPO.h"
+#include "llvm/Transforms/IPO/AlwaysInliner.h"
+#include "llvm/Transforms/IPO/GlobalDCE.h"
+#include "llvm/Transforms/IPO/Internalize.h"
+#include "llvm/Transforms/IPO/ModuleInliner.h"
+#include "llvm/Transforms/Utils/UnifyFunctionExitNodes.h"
 
 #include "seahorn/HornCex.hh"
 #include "seahorn/HornSolver.hh"
@@ -214,6 +223,38 @@ std::string getFileName(const std::string &str) {
   return filename;
 }
 
+namespace {
+/// Legacy pass pipeline executed under the new pass manager.
+class LegacyPassPipelinePass
+    : public llvm::PassInfoMixin<LegacyPassPipelinePass> {
+  std::vector<std::unique_ptr<llvm::Pass>> m_passes;
+
+public:
+  explicit LegacyPassPipelinePass(
+      std::vector<std::unique_ptr<llvm::Pass>> passes)
+      : m_passes(std::move(passes)) {}
+
+  llvm::PreservedAnalyses run(llvm::Module &m, llvm::ModuleAnalysisManager &) {
+    llvm::legacy::PassManager pm;
+    for (auto &pass : m_passes)
+      pm.add(pass.release());
+    pm.run(m);
+    return llvm::PreservedAnalyses::none();
+  }
+};
+
+class LegacyPassPipelineBuilder {
+  std::vector<std::unique_ptr<llvm::Pass>> m_passes;
+
+public:
+  void add(llvm::Pass *pass) { m_passes.emplace_back(pass); }
+  bool empty() const { return m_passes.empty(); }
+  std::vector<std::unique_ptr<llvm::Pass>> takePasses() {
+    return std::move(m_passes);
+  }
+};
+} // namespace
+
 int main(int argc, char **argv) {
   seahorn::ScopedStats _st("seahorn_total");
 
@@ -275,7 +316,13 @@ int main(int argc, char **argv) {
   // initialise and run passes //
   ///////////////////////////////
 
-  llvm::legacy::PassManager pass_manager;
+  LegacyPassPipelineBuilder pass_manager;
+  llvm::ModulePassManager MPM;
+  auto flushLegacyPipeline = [&]() {
+    if (pass_manager.empty())
+      return;
+    MPM.addPass(LegacyPassPipelinePass(pass_manager.takePasses()));
+  };
   llvm::PassRegistry &Registry = *llvm::PassRegistry::getPassRegistry();
 
   llvm::initializeAnalysis(Registry);
@@ -283,9 +330,6 @@ int main(int argc, char **argv) {
   llvm::initializeScalarOpts(Registry);
   llvm::initializeIPO(Registry);
   llvm::initializeCallGraphWrapperPassPass(Registry);
-#if LLVM_VERSION_MAJOR < 18
-  llvm::initializeCallGraphPrinterLegacyPassPass(Registry);
-#endif
   llvm::initializeCallGraphViewerPass(Registry);
   // XXX: not sure if needed anymore
   llvm::initializeGlobalsAAWrapperPassPass(Registry);
@@ -312,19 +356,19 @@ int main(int argc, char **argv) {
   auto PreserveMain = [=](const llvm::GlobalValue &GV) {
     return GV.getName() == "main";
   };
-#if LLVM_VERSION_MAJOR < 18
-  pass_manager.add(llvm::createInternalizePass(PreserveMain));
-  pass_manager.add(llvm::createGlobalDCEPass()); // kill unused internal global
-#endif
+
+  flushLegacyPipeline();
+  MPM.addPass(llvm::InternalizePass(PreserveMain));
+  MPM.addPass(llvm::GlobalDCEPass());
+
   pass_manager.add(seahorn::createGeneratePartialFnPass());
 
   if (InlineAll) {
     pass_manager.add(seahorn::createMarkInternalInlinePass());
-    pass_manager.add(llvm::createAlwaysInlinerLegacyPass());
-#if LLVM_VERSION_MAJOR < 18
-    pass_manager.add(
-        llvm::createGlobalDCEPass()); // kill unused internal global
-#endif
+    flushLegacyPipeline();
+    MPM.addPass(llvm::AlwaysInlinerPass());
+    flushLegacyPipeline();
+    MPM.addPass(llvm::GlobalDCEPass());
   }
 
   pass_manager.add(new seahorn::RemoveUnreachableBlocksPass());
@@ -345,22 +389,23 @@ int main(int argc, char **argv) {
   pass_manager.add(new seahorn::LowerCstExprPass());
   pass_manager.add(llvm::createDeadCodeEliminationPass());
 
-#if LLVM_VERSION_MAJOR < 18
-  pass_manager.add(llvm::createUnifyFunctionExitNodesPass());
-#endif
+  flushLegacyPipeline();
+  {
+    llvm::FunctionPassManager FPM;
+    FPM.addPass(llvm::UnifyFunctionExitNodesPass());
+    MPM.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(FPM)));
+  }
 
   // -- it invalidates DSA passes so it should be run before
   // -- ShadowMem
-#if LLVM_VERSION_MAJOR < 18
-  pass_manager.add(llvm::createGlobalDCEPass()); // kill unused internal global
-#endif
+  flushLegacyPipeline();
+  MPM.addPass(llvm::GlobalDCEPass());
 
   // -- initialize any global variables that are left
   if (LowerGlobalInitializers) {
     pass_manager.add(new seahorn::LowerGvInitializers());
-#if LLVM_VERSION_MAJOR < 18
-    pass_manager.add(llvm::createFunctionInliningPass());
-#endif
+    flushLegacyPipeline();
+    MPM.addPass(llvm::ModuleInlinerPass());
   }
 
   pass_manager.add(seadsa::createRemovePtrToIntPass());
@@ -495,7 +540,19 @@ int main(int argc, char **argv) {
     }
   }
 
-  pass_manager.run(*module.get());
+  llvm::LoopAnalysisManager LAM;
+  llvm::FunctionAnalysisManager FAM;
+  llvm::CGSCCAnalysisManager CGAM;
+  llvm::ModuleAnalysisManager MAM;
+  llvm::PassBuilder PB;
+  PB.registerModuleAnalyses(MAM);
+  PB.registerCGSCCAnalyses(CGAM);
+  PB.registerFunctionAnalyses(FAM);
+  PB.registerLoopAnalyses(LAM);
+  PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+
+  flushLegacyPipeline();
+  MPM.run(*module.get(), MAM);
 
   if (!AsmOutputFilename.empty())
     asmOutput->keep();

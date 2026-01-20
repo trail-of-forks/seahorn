@@ -11,14 +11,18 @@
 
 #include "llvm_seahorn/InitializePasses.h"
 #include "llvm_seahorn/Transforms/IPO.h"
+#include "llvm/Analysis/CGSCCPassManager.h"
+#include "llvm/Analysis/LoopAnalysisManager.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/Bitcode/BitcodeWriterPass.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/PassManager.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/LinkAllPasses.h"
+#include "llvm/Passes/PassBuilder.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FileSystem.h"
@@ -29,7 +33,16 @@
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/IPO.h"
+#include "llvm/Transforms/IPO/GlobalDCE.h"
+#include "llvm/Transforms/IPO/GlobalOpt.h"
+#include "llvm/Transforms/IPO/Internalize.h"
+#include "llvm/Transforms/IPO/StripSymbols.h"
+#include "llvm/Transforms/IPO/WholeProgramDevirt.h"
 #include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Scalar/LoopPassManager.h"
+#include "llvm/Transforms/Scalar/LoopSimplifyCFG.h"
+#include "llvm/Transforms/Utils/InstructionNamer.h"
+#include "llvm/Transforms/Utils/UnifyFunctionExitNodes.h"
 
 #include "llvm/IR/Verifier.h"
 
@@ -302,28 +315,47 @@ std::string getFileName(const std::string &str) {
 }
 
 namespace {
-/// Simple wrapper around llvm::legacy::PassManager for easier debugging.
-class SeaPassManagerWrapper {
-  llvm::legacy::PassManager m_PM;
-  int m_verifierInstanceID = 0;
+/// Legacy pass pipeline executed under the new pass manager.
+class LegacyPassPipelinePass
+    : public llvm::PassInfoMixin<LegacyPassPipelinePass> {
+  std::vector<std::unique_ptr<llvm::Pass>> m_passes;
+  bool m_verifyAfterAll = false;
 
 public:
-  SeaPassManagerWrapper() {
-    if (VerifyAfterAll)
-      m_PM.add(seahorn::createDebugVerifierPass(++m_verifierInstanceID,
-                                                "Initial Verifier Pass"));
+  LegacyPassPipelinePass(std::vector<std::unique_ptr<llvm::Pass>> passes,
+                         bool verifyAfterAll)
+      : m_passes(std::move(passes)), m_verifyAfterAll(verifyAfterAll) {}
+
+  llvm::PreservedAnalyses run(llvm::Module &m, llvm::ModuleAnalysisManager &) {
+    llvm::legacy::PassManager pm;
+    int verifierInstanceID = 0;
+
+    if (m_verifyAfterAll)
+      pm.add(seahorn::createDebugVerifierPass(++verifierInstanceID,
+                                              "Initial Verifier Pass"));
+
+    for (auto &pass : m_passes) {
+      llvm::Pass *rawPass = pass.release();
+      pm.add(rawPass);
+      if (m_verifyAfterAll)
+        pm.add(seahorn::createDebugVerifierPass(++verifierInstanceID,
+                                                rawPass->getPassName()));
+    }
+
+    pm.run(m);
+    return llvm::PreservedAnalyses::none();
   }
-  void add(llvm::Pass *pass) {
-    m_PM.add(pass);
+};
 
-    if (VerifyAfterAll)
-      m_PM.add(seahorn::createDebugVerifierPass(++m_verifierInstanceID,
-                                                pass->getPassName()));
+class LegacyPassPipelineBuilder {
+  std::vector<std::unique_ptr<llvm::Pass>> m_passes;
+
+public:
+  void add(llvm::Pass *pass) { m_passes.emplace_back(pass); }
+  bool empty() const { return m_passes.empty(); }
+  std::vector<std::unique_ptr<llvm::Pass>> takePasses() {
+    return std::move(m_passes);
   }
-
-  void run(llvm::Module &m) { m_PM.run(m); }
-
-  llvm::legacy::PassManager &getPassManager() { return m_PM; }
 };
 } // namespace
 
@@ -378,7 +410,14 @@ int main(int argc, char **argv) {
   // initialise and run passes //
   ///////////////////////////////
 
-  SeaPassManagerWrapper pm_wrapper;
+  LegacyPassPipelineBuilder pm_wrapper;
+  llvm::ModulePassManager MPM;
+  auto flushLegacyPipeline = [&]() {
+    if (pm_wrapper.empty())
+      return;
+    MPM.addPass(
+        LegacyPassPipelinePass(pm_wrapper.takePasses(), VerifyAfterAll));
+  };
   llvm::PassRegistry &Registry = *llvm::PassRegistry::getPassRegistry();
   llvm::initializeCore(Registry);
   llvm::initializeTransformUtils(Registry);
@@ -448,9 +487,15 @@ int main(int argc, char **argv) {
     assert(LowerSwitch && "Lower switch must be enabled");
     pm_wrapper.add(llvm::createLowerSwitchPass());
     pm_wrapper.add(llvm::createLoopSimplifyPass());
-#if LLVM_VERSION_MAJOR < 18
-    pm_wrapper.add(llvm::createLoopSimplifyCFGPass());
-#endif
+
+    flushLegacyPipeline();
+    {
+      llvm::FunctionPassManager FPM;
+      FPM.addPass(
+          llvm::createFunctionToLoopPassAdaptor(llvm::LoopSimplifyCFGPass()));
+      MPM.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(FPM)));
+    }
+
     pm_wrapper.add(llvm_seahorn::createLoopRotatePass(/*1023*/));
     pm_wrapper.add(llvm::createLCSSAPass());
     if (PeelLoops > 0)
@@ -529,9 +574,9 @@ int main(int argc, char **argv) {
     auto PreserveMain = [=](const llvm::GlobalValue &GV) {
       return GV.getName() == "main" || GV.getName() == "bcmp";
     };
-#if LLVM_VERSION_MAJOR < 18
-    pm_wrapper.add(llvm::createInternalizePass(PreserveMain));
-#endif
+
+    flushLegacyPipeline();
+    MPM.addPass(llvm::InternalizePass(PreserveMain));
 
     if (LowerInvoke) {
       // -- lower invoke's
@@ -543,9 +588,10 @@ int main(int argc, char **argv) {
     // -- resolve indirect calls
     if (DevirtualizeFuncs) {
       pm_wrapper.add(seadsa::createRemovePtrToIntPass());
-#if LLVM_VERSION_MAJOR < 18
-      pm_wrapper.add(llvm::createWholeProgramDevirtPass(nullptr, nullptr));
-#endif
+
+      flushLegacyPipeline();
+      MPM.addPass(llvm::WholeProgramDevirtPass());
+
       pm_wrapper.add(seahorn::createDevirtualizeFunctionsPass());
     }
 
@@ -553,15 +599,12 @@ int main(int argc, char **argv) {
     if (ExternalizeAddrTakenFuncs)
       pm_wrapper.add(seahorn::createExternalizeAddressTakenFunctionsPass());
 
-    // kill internal unused code
-#if LLVM_VERSION_MAJOR < 18
-    pm_wrapper.add(llvm::createGlobalDCEPass()); // kill unused internal global
-#endif
+    flushLegacyPipeline();
+    MPM.addPass(llvm::GlobalDCEPass());
 
     // -- global optimizations
-#if LLVM_VERSION_MAJOR < 18
-    pm_wrapper.add(llvm::createGlobalOptimizerPass());
-#endif
+    flushLegacyPipeline();
+    MPM.addPass(llvm::GlobalOptPass());
 
     // -- explicitly initialize globals in the beginning of main()
     if (LowerGlobalInitializers)
@@ -670,10 +713,10 @@ int main(int argc, char **argv) {
     // run inliner pass
     if (InlineAll || InlineAllocFn || InlineConstructFn) {
       pm_wrapper.add(llvm::createAlwaysInlinerLegacyPass());
-#if LLVM_VERSION_MAJOR < 18
-      pm_wrapper.add(
-          llvm::createGlobalDCEPass()); // kill unused internal global
-#endif
+
+      flushLegacyPipeline();
+      MPM.addPass(llvm::GlobalDCEPass());
+
       pm_wrapper.add(seahorn::createPromoteMallocPass());
       pm_wrapper.add(seahorn::createRemoveUnreachableBlocksPass());
 
@@ -688,12 +731,16 @@ int main(int argc, char **argv) {
     pm_wrapper.add(llvm::createDeadCodeEliminationPass());
     // Superseded by DCE in LLVM12
     // pm_wrapper.add(llvm::createDeadInstEliminationPass());
-#if LLVM_VERSION_MAJOR < 18
-    pm_wrapper.add(llvm::createGlobalDCEPass()); // kill unused internal global
-#endif
-#if LLVM_VERSION_MAJOR < 18
-    pm_wrapper.add(llvm::createUnifyFunctionExitNodesPass());
-#endif
+
+    flushLegacyPipeline();
+    MPM.addPass(llvm::GlobalDCEPass());
+
+    flushLegacyPipeline();
+    {
+      llvm::FunctionPassManager FPM;
+      FPM.addPass(llvm::UnifyFunctionExitNodesPass());
+      MPM.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(FPM)));
+    }
 
     // -- moves loop initialization up
     // AG: After inline because cheap and loop initialization is moved higher up
@@ -706,9 +753,9 @@ int main(int argc, char **argv) {
 
     pm_wrapper.add(seahorn::createRemoveUnreachableBlocksPass());
     pm_wrapper.add(seahorn::createPromoteMallocPass());
-#if LLVM_VERSION_MAJOR < 18
-    pm_wrapper.add(llvm::createGlobalDCEPass()); // kill unused internal global
-#endif
+
+    flushLegacyPipeline();
+    MPM.addPass(llvm::GlobalDCEPass());
 
     // -- Enable function slicing
     // AG: NOT USED. Not part of std pipeline
@@ -722,13 +769,17 @@ int main(int argc, char **argv) {
   if (NameValues)
     pm_wrapper.add(seahorn::createNameValuesPass());
 
-#if LLVM_VERSION_MAJOR < 18
-  if (InstNamer)
-    pm_wrapper.add(llvm::createInstructionNamerPass());
+  if (InstNamer) {
+    flushLegacyPipeline();
+    llvm::FunctionPassManager FPM;
+    FPM.addPass(llvm::InstructionNamerPass());
+    MPM.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(FPM)));
+  }
 
-  if (StripDebug)
-    pm_wrapper.add(llvm::createStripDeadDebugInfoPass());
-#endif
+  if (StripDebug) {
+    flushLegacyPipeline();
+    MPM.addPass(llvm::StripDeadDebugInfoPass());
+  }
   // --- verify if an undefined value can be read
   pm_wrapper.add(seahorn::createCanReadUndefPass());
   // --- verify if bitcode is well-formed
@@ -741,7 +792,19 @@ int main(int argc, char **argv) {
       pm_wrapper.add(createBitcodeWriterPass(output->os()));
   }
 
-  pm_wrapper.run(*module.get());
+  llvm::LoopAnalysisManager LAM;
+  llvm::FunctionAnalysisManager FAM;
+  llvm::CGSCCAnalysisManager CGAM;
+  llvm::ModuleAnalysisManager MAM;
+  llvm::PassBuilder PB;
+  PB.registerModuleAnalyses(MAM);
+  PB.registerCGSCCAnalyses(CGAM);
+  PB.registerFunctionAnalyses(FAM);
+  PB.registerLoopAnalyses(LAM);
+  PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+
+  flushLegacyPipeline();
+  MPM.run(*module.get(), MAM);
 
   if (PrintStats)
     seahorn::Stats::PrintBrunch(llvm::outs());

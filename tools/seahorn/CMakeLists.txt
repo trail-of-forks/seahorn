@@ -20,12 +20,13 @@ set(LLVM_LINK_COMPONENTS
   IPO
   ScalarOpts
   Instrumentation Core
+  Passes
   # XXX not clear why these last two are required
   CodeGen
   ObjCARCOpts)
 add_llvm_executable(seahorn DISABLE_LLVM_LINK_LLVM_DYLIB seahorn.cpp)
 target_link_libraries (seahorn PRIVATE ${USED_LIBS})
-#llvm_config (seahorn ${LLVM_LINK_COMPONENTS})
+llvm_config (seahorn ${LLVM_LINK_COMPONENTS})
 install(TARGETS seahorn RUNTIME DESTINATION bin)
 
 if (SEAHORN_STATIC_EXE)
