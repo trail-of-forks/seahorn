@@ -4,6 +4,10 @@ include (CTest)
 # In the future we can group tests by linking dependencies and move them into
 # seperate directories.
 set (USED_LIBS_Z3_TESTS
+  SeaAnalysis
+  SeaInstrumentation
+  SeaTransformsScalar
+  SeaTransformsUtils
   SeaSmt
   SeaSupport
   ${SEA_DSA_LIBS}
