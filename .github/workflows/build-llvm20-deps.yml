@@ -40,7 +40,7 @@ jobs:
           echo "Upload artifact: ${{ github.event.inputs.upload_artifact }}"
 
       - name: Check Out Repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: dev20
 
@@ -63,7 +63,7 @@ jobs:
 
       - name: Upload LLVM20 package as artifact
         if: ${{ github.event.inputs.upload_artifact == 'true' }}
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: llvm-seahorn-20.1.4-jammy-${{ github.event.inputs.build_type }}
           path: llvm-seahorn-*.tar.gz
