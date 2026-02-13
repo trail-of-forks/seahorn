@@ -16,7 +16,7 @@
 # About #
 
 [SeaHorn][seahorn-web] is an automated analysis framework for
- LLVM-based languages. This version compiles against LLVM 14.
+ LLVM-based languages. This version compiles against LLVM 20 (minimum 20.1.4).
 
 Some of the supported features are
  
@@ -245,8 +245,8 @@ are:
 The easiest way to get started with SeaHorn is via a docker distribution. 
 
 ```shell
-$ docker pull seahorn/seahorn-llvm14:nightly
-$ docker run --rm -it seahorn/seahorn-llvm14:nightly
+$ docker pull seahorn/seahorn-llvm20:nightly
+$ docker run --rm -it seahorn/seahorn-llvm20:nightly
 ```
 
 Start with exploring what the `sea` command can do:
@@ -275,10 +275,10 @@ If this does not work, run:
 ```shell
 $ wget https://apt.llvm.org/llvm.sh
 $ chmod +x llvm.sh
-$ sudo ./llvm.sh 14
-$ apt download libpolly-14-dev && sudo dpkg --force-all -i libpolly-14-dev*
+$ sudo ./llvm.sh 20
+$ apt download libpolly-20-dev && sudo dpkg --force-all -i libpolly-20-dev*
 ```
-The first 3 commands will install LLVM 14, the 4th will install libpolly which is wrongly omitted from LLVM 14 (but included in subsequent versions)
+The first 3 commands will install LLVM 20, the 4th will install libpolly which is wrongly omitted from LLVM 20 (but included in subsequent versions)
 
 Next, follow the instruction in the Docker file above
 
@@ -329,8 +329,8 @@ On Linux, we suggest the following `cmake` configuration:
 $ cd build
 $ cmake -DCMAKE_INSTALL_PREFIX=run \
       -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-      -DCMAKE_CXX_COMPILER="clang++-14" \
-      -DCMAKE_C_COMPILER="clang-14" \
+      -DCMAKE_CXX_COMPILER="clang++-20" \
+      -DCMAKE_C_COMPILER="clang-20" \
       -DSEA_ENABLE_LLD=ON  \
       -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
       ../ \
@@ -393,7 +393,7 @@ SeaHorn.
 SeaHorn doesn't come with its own version of Clang and expects to find it
 either in the build directory (`run/bin`) or in PATH. Make sure that the
 version of Clang matches the version of LLVM that was used to compile 
-SeaHorn (currently LLVM14). The easiest way to provide the right version of 
+SeaHorn (currently LLVM20). The easiest way to provide the right version of 
 Clang is to download it from [llvm.org](http://releases.llvm.org/download.html),
 unpact it somewhere and create a symbolic link to `clang` and `clang++`
 in `run/bin`.

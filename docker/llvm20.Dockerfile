@@ -32,8 +32,8 @@ RUN update-alternatives --install "/usr/bin/ld" "ld" "/usr/bin/ld.lld-14" 50
 
 WORKDIR /llvm20
 
-# Clone llvm-seahorn
-RUN git clone https://github.com/trail-of-forks/llvm-seahorn.git repo -b dev20 --depth=1
+# Clone LLVM 20.1.4 from official repository
+RUN git clone https://github.com/llvm/llvm-project.git repo -b llvmorg-20.1.4 --depth=1
 
 # Build LLVM
 WORKDIR /llvm20/build
@@ -54,7 +54,7 @@ RUN cmake -G Ninja \
     -DLLVM_BINDINGS_LIST="" \
     -DLLVM_ENABLE_BINDINGS=OFF \
     -DCPACK_GENERATOR="TGZ" \
-    -DCPACK_PACKAGE_FILE_NAME="llvm-seahorn-20.0.0-jammy-${BUILD_TYPE}" \
+    -DCPACK_PACKAGE_FILE_NAME="llvm-seahorn-20.1.4-jammy-${BUILD_TYPE}" \
     ../repo/llvm
 
 # Build and create package
