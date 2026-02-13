@@ -28,6 +28,7 @@ RUN apt-get update && \
       graphviz libgraphviz-dev python3-pygraphviz \
       lcov gcovr rsync \
       llvm-20 llvm-20-dev llvm-20-tools llvm-20-runtime \
+      libpolly-20-dev \
       clang-20 lldb-20 lld-20 clang-format-20 && \
   # Install gcc-multilib only on x86_64/amd64 architecture
   if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
