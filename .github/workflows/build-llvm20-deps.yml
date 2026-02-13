@@ -1,0 +1,76 @@
+# Workflow to build LLVM 20 dependencies
+# Can be manually triggered from the Actions tab
+
+name: Build LLVM20 Dependencies
+
+# Controls when the action will run
+on:
+  # Allow manual trigger from Actions tab
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type (Debug, Release, RelWithDebInfo)'
+        required: true
+        default: 'RelWithDebInfo'
+        type: choice
+        options:
+          - Debug
+          - Release
+          - RelWithDebInfo
+      upload_artifact:
+        description: 'Upload built package as artifact'
+        required: true
+        default: true
+        type: boolean
+      triggerer:
+        description: 'Triggered by:'
+        required: false
+        default: ''
+
+jobs:
+  build-llvm20:
+    name: Build LLVM 20.1.4
+    runs-on: self-hosted
+
+    steps:
+      - name: Log manual trigger info
+        run: |
+          echo "Triggered by: ${{ github.event.inputs.triggerer || github.actor }}"
+          echo "Build type: ${{ github.event.inputs.build_type }}"
+          echo "Upload artifact: ${{ github.event.inputs.upload_artifact }}"
+
+      - name: Check Out Repo
+        uses: actions/checkout@v3
+        with:
+          ref: dev20
+
+      - name: Clean up previous builds
+        run: |
+          docker system prune -f
+          rm -f llvm-seahorn-*.tar.gz || true
+
+      - name: Build LLVM20 Docker image
+        run: |
+          docker build . \
+            --file docker/llvm20.Dockerfile \
+            --tag llvm20-builder:${{ github.event.inputs.build_type }} \
+            --build-arg BUILD_TYPE=${{ github.event.inputs.build_type }}
+
+      - name: Extract LLVM20 package from Docker
+        run: |
+          docker run -v $(pwd):/host llvm20-builder:${{ github.event.inputs.build_type }} /bin/sh -c "cp *.tar.gz /host/"
+          ls -lh llvm-seahorn-*.tar.gz
+
+      - name: Upload LLVM20 package as artifact
+        if: ${{ github.event.inputs.upload_artifact == 'true' }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: llvm-seahorn-20.1.4-jammy-${{ github.event.inputs.build_type }}
+          path: llvm-seahorn-*.tar.gz
+          retention-days: 30
+
+      - name: Display package info
+        run: |
+          echo "Built LLVM20 package:"
+          ls -lh llvm-seahorn-*.tar.gz
+          echo "Package size: $(du -h llvm-seahorn-*.tar.gz | cut -f1)"
